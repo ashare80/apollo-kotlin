@@ -6,13 +6,11 @@
 package com.example.inline_fragment_with_include_directive.adapter
 
 import com.apollographql.apollo3.api.BooleanAdapter
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.json.JsonWriter
 import com.example.inline_fragment_with_include_directive.TestQuery
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object TestQuery_VariablesAdapter {
   @Suppress(
@@ -24,12 +22,10 @@ public object TestQuery_VariablesAdapter {
     `value`: TestQuery,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     writer.name("withDetails")
-    BooleanAdapter.toJson(writer, CustomScalarAdapters.Empty, value.withDetails)
+    BooleanAdapter.toJson(writer, customScalarAdapters, value.withDetails)
     writer.name("skipHumanDetails")
-    BooleanAdapter.toJson(writer, CustomScalarAdapters.Empty, value.skipHumanDetails)
+    BooleanAdapter.toJson(writer, customScalarAdapters, value.skipHumanDetails)
   }
 }

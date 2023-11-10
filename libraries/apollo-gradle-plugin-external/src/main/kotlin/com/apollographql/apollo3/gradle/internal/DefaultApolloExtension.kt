@@ -68,6 +68,69 @@ abstract class DefaultApolloExtension(
     )
   }
 
+  internal fun getServiceTelemetryData(): List<ApolloGradleToolingModel.TelemetryData.ServiceTelemetryData> = services.map { service ->
+    DefaultServiceTelemetryData(
+        codegenModels = service.codegenModels.orNull,
+        warnOnDeprecatedUsages = service.warnOnDeprecatedUsages.orNull,
+        failOnWarnings = service.failOnWarnings.orNull,
+        operationManifestFormat = service.operationManifestFormat.orNull,
+        generateKotlinModels = service.generateKotlinModels.orNull,
+        languageVersion = service.languageVersion.orNull,
+        useSemanticNaming = service.useSemanticNaming.orNull,
+        addJvmOverloads = service.addJvmOverloads.orNull,
+        generateAsInternal = service.generateAsInternal.orNull,
+        generateFragmentImplementations = service.generateFragmentImplementations.orNull,
+        generateQueryDocument = service.generateQueryDocument.orNull,
+        generateSchema = service.generateSchema.orNull,
+        generateOptionalOperationVariables = service.generateOptionalOperationVariables.orNull,
+        generateDataBuilders = service.generateDataBuilders.orNull,
+        generateModelBuilders = service.generateModelBuilders.orNull,
+        generateMethods = service.generateMethods.orNull,
+        generatePrimitiveTypes = service.generatePrimitiveTypes.orNull,
+        generateInputBuilders = service.generateInputBuilders.orNull,
+        nullableFieldStyle = service.nullableFieldStyle.orNull,
+        decapitalizeFields = service.decapitalizeFields.orNull,
+        jsExport = service.jsExport.orNull,
+        addTypename = service.addTypename.orNull,
+        flattenModels = service.flattenModels.orNull,
+        fieldsOnDisjointTypesMustMerge = service.fieldsOnDisjointTypesMustMerge.orNull,
+        generateApolloMetadata = service.generateApolloMetadata.orNull,
+
+        // Options for which we don't mind the value but want to know they are used
+        usedOptions = mutableSetOf<String>().apply {
+          if (service.includes.isPresent) add("includes")
+          if (service.excludes.isPresent) add("excludes")
+          if (service.sourceFolder.isPresent) add("excludes")
+          if (service.schemaFile.isPresent) add("schemaFile")
+          if (!service.schemaFiles.isEmpty) add("schemaFiles")
+          if (service.scalarAdapterMapping.isNotEmpty()) {
+            add("mapScalarAdapterExpression")
+          } else if (service.scalarTypeMapping.isNotEmpty()) {
+            add("mapScalar")
+          }
+          if (service.operationIdGenerator.isPresent) add("operationIdGenerator")
+          if (service.operationOutputGenerator.isPresent) add("operationOutputGenerator")
+          if (service.packageNameGenerator.isPresent) add("packageNameGenerator")
+          if (service.operationManifest.isPresent) add("operationManifest")
+          if (service.generatedSchemaName.isPresent) add("generatedSchemaName")
+          if (service.debugDir.isPresent) add("debugDir")
+          if (service.sealedClassesForEnumsMatching.isPresent) add("sealedClassesForEnumsMatching")
+          if (service.classesForEnumsMatching.isPresent) add("classesForEnumsMatching")
+          if (service.outputDir.isPresent) add("outputDir")
+          if (service.alwaysGenerateTypesMatching.isPresent) add("alwaysGenerateTypesMatching")
+          if (service.compilerKotlinHooks.isPresent) add("compilerKotlinHooks")
+          if (service.compilerJavaHooks.isPresent) add("compilerJavaHooks")
+          if (service.introspection != null) add("introspection")
+          if (service.registry != null) add("registry")
+          if (service.upstreamDependencies.isNotEmpty()) add("dependsOn")
+          if (service.downstreamDependencies.isNotEmpty()) add("isADependencyOf")
+        },
+    )
+  }
+
+  internal val serviceCount: Int
+    get() = services.size
+
   @get:Inject
   protected abstract val softwareComponentFactory: SoftwareComponentFactory
 
@@ -234,7 +297,7 @@ abstract class DefaultApolloExtension(
     }
 
     codegenOnGradleSyncConfigured = true
-    if (this.generateSourcesDuringGradleSync.getOrElse(true)) {
+    if (this.generateSourcesDuringGradleSync.getOrElse(false)) {
       project.tasks.maybeCreate("prepareKotlinIdeaImport").dependsOn(generateApolloSources)
     }
   }
@@ -544,7 +607,6 @@ abstract class DefaultApolloExtension(
       task.alwaysGenerateTypesMatching.set(service.alwaysGenerateTypesMatching())
 
       task.outputFile.set(BuildDirLayout.ir(project, service))
-      task.useAntlr.set(useAntlr)
     }
   }
 
@@ -585,6 +647,8 @@ abstract class DefaultApolloExtension(
       project.tasks.register(ModelNames.registerApolloOperations(service), ApolloRegisterOperationsTask::class.java) { task ->
         task.group = TASK_GROUP
 
+        task.operationManifestFormat.set(service.operationManifestFormat())
+        task.listId.set(registerOperationsConfig.listId)
         task.graph.set(registerOperationsConfig.graph)
         task.graphVariant.set(registerOperationsConfig.graphVariant)
         task.key.set(registerOperationsConfig.key)
@@ -642,6 +706,7 @@ abstract class DefaultApolloExtension(
     service.packageName.disallowChanges()
 
     task.generateFilterNotNull.set(project.isKotlinMultiplatform)
+    task.generateMethods.set(service.generateMethods())
     task.generateFragmentImplementations.set(service.generateFragmentImplementations)
     task.generateQueryDocument.set(service.generateQueryDocument)
     task.generateSchema.set(service.generateSchema)
@@ -654,6 +719,7 @@ abstract class DefaultApolloExtension(
     task.generateOptionalOperationVariables.set(service.generateOptionalOperationVariables)
     task.requiresOptInAnnotation.set(service.requiresOptInAnnotation)
     task.generatePrimitiveTypes.set(service.generatePrimitiveTypes)
+    task.generateInputBuilders.set(service.generateInputBuilders)
     val nullableFieldStyle: String? = service.nullableFieldStyle.orNull
     task.nullableFieldStyle.set(
         project.provider {
@@ -716,7 +782,6 @@ abstract class DefaultApolloExtension(
       task.generateDataBuilders.set(service.generateDataBuilders)
       task.fieldsOnDisjointTypesMustMerge.set(service.fieldsOnDisjointTypesMustMerge)
       task.decapitalizeFields.set(service.decapitalizeFields)
-      task.useAntlr.set(useAntlr)
 
       configureBaseCodegenTask(project, task, service)
     }
@@ -839,7 +904,6 @@ abstract class DefaultApolloExtension(
 
   abstract override val linkSqlite: Property<Boolean>
   abstract override val generateSourcesDuringGradleSync: Property<Boolean>
-  abstract override val useAntlr: Property<Boolean>
 
   companion object {
     private const val TASK_GROUP = "apollo"
@@ -908,5 +972,28 @@ abstract class DefaultApolloExtension(
 
     internal fun Project.hasJavaPlugin() = project.extensions.findByName("java") != null
     internal fun Project.hasKotlinPlugin() = project.extensions.findByName("kotlin") != null
+  }
+
+  override fun apolloKspProcessor(schema: File, service: String, packageName: String): Any {
+    check (project.pluginManager.hasPlugin("com.google.devtools.ksp")) {
+      "Calling apolloKspProcessor only makes sense if the 'com.google.devtools.ksp' plugin is applied"
+    }
+
+    val producer = project.configurations.create("apollo${service.capitalizeFirstLetter()}KspProcessorProducer") {
+      it.isCanBeResolved = false
+      it.isCanBeConsumed = true
+    }
+
+    producer.dependencies.add(project.dependencies.create("com.apollographql.apollo3:apollo-ksp"))
+    val taskProvider = project.tasks.register("generate${service.capitalizeFirstLetter()}ApolloKspProcessor", ApolloGenerateKspProcessorTask::class.java) {
+      it.schema.set(schema)
+      it.serviceName.set(service)
+      it.packageName.set(packageName)
+      it.outputJar.set(BuildDirLayout.kspProcessorJar(project, service))
+    }
+
+    project.artifacts.add(producer.name, taskProvider.flatMap { it.outputJar })
+
+    return project.dependencies.project(mapOf("path" to project.path, "configuration" to producer.name))
   }
 }

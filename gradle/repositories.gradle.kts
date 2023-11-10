@@ -5,7 +5,7 @@ listOf(pluginManagement.repositories, dependencyResolutionManagement.repositorie
     mavenCentral()
 
     exclusiveContent {
-      // TODO comment when a stable version of Compose is available for Kotlin 1.9
+      // Uncomment to use a "dev" version of Compose when bumping Kotlin versions
       forRepository {
         // Androidx "dev" repository for Compose
         maven { url = uri("https://androidx.dev/storage/compose-compiler/repository/") }
@@ -37,15 +37,6 @@ listOf(pluginManagement.repositories, dependencyResolutionManagement.repositorie
         // For org.jetbrains.changelog
         includeModule("org.jetbrains.changelog", "org.jetbrains.changelog.gradle.plugin")
         includeModule("org.jetbrains.intellij.plugins", "gradle-changelog-plugin")
-      }
-    }
-
-    exclusiveContent {
-      @Suppress("DEPRECATION")
-      forRepository(::jcenter)
-      filter {
-        // https://github.com/Kotlin/kotlinx-nodejs/issues/16
-        includeModule("org.jetbrains.kotlinx", "kotlinx-nodejs")
       }
     }
   }

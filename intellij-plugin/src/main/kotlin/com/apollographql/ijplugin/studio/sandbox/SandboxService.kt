@@ -6,15 +6,17 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.impl.ActionToolbarImpl
+import com.intellij.openapi.application.invokeLater
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.OnePixelSplitter
-import org.jetbrains.kotlin.idea.util.application.invokeLater
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 
+@Service(Service.Level.PROJECT)
 class SandboxService(
     private val project: Project,
 ) : Disposable {

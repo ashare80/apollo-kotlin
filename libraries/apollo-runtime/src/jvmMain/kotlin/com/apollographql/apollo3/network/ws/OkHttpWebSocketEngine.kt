@@ -1,8 +1,8 @@
 package com.apollographql.apollo3.network.ws
 
 import com.apollographql.apollo3.api.http.HttpHeader
+import com.apollographql.apollo3.exception.ApolloNetworkException
 import com.apollographql.apollo3.exception.ApolloWebSocketClosedException
-import com.apollographql.apollo3.internal.ChannelWrapper
 import com.apollographql.apollo3.network.toOkHttpHeaders
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
@@ -21,11 +21,11 @@ actual class DefaultWebSocketEngine(
       webSocketFactory = OkHttpClient()
   )
 
-  override suspend fun open(
+  actual override suspend fun open(
       url: String,
       headers: List<HttpHeader>,
   ): WebSocketConnection {
-    val messageChannel = ChannelWrapper(Channel<String>(Channel.UNLIMITED))
+    val messageChannel = Channel<String>(Channel.UNLIMITED)
     val webSocketOpenResult = CompletableDeferred<Unit>()
 
     //println("opening $url")
@@ -52,7 +52,7 @@ actual class DefaultWebSocketEngine(
       override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         //println("onFailure: ${t.message} - ${response?.body?.string()}")
         webSocketOpenResult.complete(Unit)
-        messageChannel.close(t)
+        messageChannel.close(ApolloNetworkException(message = "Web socket communication error", platformCause = t))
       }
 
       override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -71,7 +71,7 @@ actual class DefaultWebSocketEngine(
 
     webSocketOpenResult.await()
 
-    messageChannel.setInvokeOnClose {
+    messageChannel.invokeOnClose {
       // I think this is not necessary. The caller must call [WebSocketConnection.close] in all cases.
       // This should either trigger onClose or onFailure which should close the messageChannel
       //

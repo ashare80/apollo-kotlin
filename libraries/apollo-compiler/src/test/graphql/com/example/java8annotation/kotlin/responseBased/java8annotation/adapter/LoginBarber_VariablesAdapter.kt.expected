@@ -5,7 +5,6 @@
 //
 package com.example.java8annotation.adapter
 
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.json.JsonWriter
 import com.apollographql.apollo3.api.obj
@@ -13,7 +12,6 @@ import com.example.java8annotation.LoginBarber
 import com.example.java8annotation.type.adapter.Login_InputAdapter
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object LoginBarber_VariablesAdapter {
   @Suppress(
@@ -25,10 +23,8 @@ public object LoginBarber_VariablesAdapter {
     `value`: LoginBarber,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     writer.name("input")
-    Login_InputAdapter.obj().toJson(writer, value.input, adapterContext)
+    Login_InputAdapter.obj().toJson(writer, customScalarAdapters, value.input)
   }
 }

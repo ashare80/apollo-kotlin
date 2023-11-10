@@ -13,13 +13,11 @@
   <depends>com.intellij.gradle</depends>
   <depends>com.intellij.lang.jsgraphql</depends>
   <depends>org.toml.lang</depends>
+  <depends optional="true" config-file="com.apollographql.ijplugin-android.xml">org.jetbrains.android</depends>
 
   <resource-bundle>messages.ApolloBundle</resource-bundle>
 
   <extensions defaultExtensionNs="com.intellij">
-
-    <!-- Application -->
-    <applicationService serviceImplementation="com.apollographql.ijplugin.application.ApolloApplicationService" />
 
     <!-- Apollo project -->
     <projectService
@@ -27,11 +25,6 @@
         serviceImplementation="com.apollographql.ijplugin.project.ApolloProjectServiceImpl"
     />
 
-    <!-- Codegen -->
-    <projectService serviceImplementation="com.apollographql.ijplugin.codegen.ApolloCodegenService" />
-
-    <!-- Settings -->
-    <projectService serviceImplementation="com.apollographql.ijplugin.settings.SettingsService" />
     <!-- Note: the value of `parentId` corresponds to the settings `id` of the JS GraphQL plugin -->
     <!-- See https://github.com/JetBrains/js-graphql-intellij-plugin/blob/396770c293a57f4903acdf427ba5136db6a79d0b/resources/META-INF/plugin.xml#L151 -->
     <projectConfigurable
@@ -64,65 +57,89 @@
     <!-- Listen to Gradle sync -->
     <externalSystemTaskNotificationListener implementation="com.apollographql.ijplugin.gradle.GradleListener" />
 
-    <!-- Tooling model -->
-    <projectService serviceImplementation="com.apollographql.ijplugin.gradle.GradleToolingModelService" />
-
-    <!-- Listens to availability of Tooling model, and notifies the GraphQL plugin -->
-    <projectService serviceImplementation="com.apollographql.ijplugin.graphql.GraphQLConfigService" />
-
     <!-- Icons -->
     <!-- This may be a bit controversial, but we want to override the GraphQL plugin's icons (hence order="first") -->
     <!-- because when navigating to GraphQL files from Kotlin code, a generic GraphQL logo is nicer than a specific -->
     <!-- icon per element type -->
     <iconProvider implementation="com.apollographql.ijplugin.icons.GraphQLIconProvider" order="first" />
 
-    <!-- Studio / Sandbox -->
-    <projectService serviceImplementation="com.apollographql.ijplugin.studio.sandbox.SandboxService" />
-
     <!-- Fields insights inspection ("expensive field") -->
     <!--suppress PluginXmlCapitalization -->
-    <localInspection language="GraphQL"
-                     implementationClass="com.apollographql.ijplugin.studio.fieldinsights.ApolloFieldInsightsInspection"
-                     groupPathKey="inspection.group.graphql"
-                     groupKey="inspection.group.graphql.studio"
-                     key="inspection.fieldInsights.displayName"
-                     enabledByDefault="true"
-                     level="WEAK WARNING"
+    <localInspection
+        language="GraphQL"
+        implementationClass="com.apollographql.ijplugin.studio.fieldinsights.ApolloFieldInsightsInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.studio"
+        key="inspection.fieldInsights.displayName"
+        enabledByDefault="true"
+        level="WEAK WARNING"
     />
 
     <!-- "Schema in .graphql file" inspection -->
     <!--suppress PluginXmlCapitalization -->
-    <localInspection language="GraphQL"
-                     implementationClass="com.apollographql.ijplugin.inspection.ApolloSchemaInGraphqlFileInspection"
-                     groupPathKey="inspection.group.graphql"
-                     groupKey="inspection.group.graphql.apolloKotlin"
-                     key="inspection.schemaInGraphqlFile.displayName"
-                     enabledByDefault="true"
-                     level="WARNING"
+    <localInspection
+        language="GraphQL"
+        implementationClass="com.apollographql.ijplugin.inspection.ApolloSchemaInGraphqlFileInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.apolloKotlin"
+        key="inspection.schemaInGraphqlFile.displayName"
+        enabledByDefault="true"
+        level="WARNING"
+    />
+
+    <!-- "Apollo Kotlin 4 is available" inspection -->
+    <!--suppress PluginXmlCapitalization, PluginXmlExtensionRegistration -->
+    <localInspection
+        implementationClass="com.apollographql.ijplugin.inspection.Apollo4AvailableInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.apolloKotlin"
+        key="inspection.apollo4Available.displayName"
+        enabledByDefault="true"
+        level="WARNING"
     />
 
     <!-- Unused operation inspection -->
     <!--suppress PluginXmlCapitalization -->
-    <localInspection language="GraphQL"
-                     implementationClass="com.apollographql.ijplugin.inspection.ApolloUnusedOperationInspection"
-                     groupPathKey="inspection.group.graphql"
-                     groupKey="inspection.group.graphql.apolloKotlin"
-                     key="inspection.unusedOperation.displayName"
-                     enabledByDefault="true"
-                     level="WARNING"
-                     editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
+    <localInspection
+        language="GraphQL"
+        implementationClass="com.apollographql.ijplugin.inspection.ApolloUnusedOperationInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.apolloKotlin"
+        key="inspection.unusedOperation.displayName"
+        enabledByDefault="true"
+        level="WARNING"
+        editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
     />
 
     <!-- Unused field inspection -->
     <!--suppress PluginXmlCapitalization -->
-    <localInspection language="GraphQL"
-                     implementationClass="com.apollographql.ijplugin.inspection.ApolloUnusedFieldInspection"
-                     groupPathKey="inspection.group.graphql"
-                     groupKey="inspection.group.graphql.apolloKotlin"
-                     key="inspection.unusedField.displayName"
-                     enabledByDefault="true"
-                     level="WARNING"
-                     editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
+    <localInspection
+        language="GraphQL"
+        implementationClass="com.apollographql.ijplugin.inspection.ApolloUnusedFieldInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.apolloKotlin"
+        key="inspection.unusedField.displayName"
+        enabledByDefault="true"
+        level="WARNING"
+        editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
+    />
+
+    <!-- "Missing introspection" inspection  -->
+    <!--suppress PluginXmlCapitalization -->
+    <localInspection
+        language="kotlin"
+        implementationClass="com.apollographql.ijplugin.inspection.ApolloEndpointNotConfiguredInspection"
+        groupPathKey="inspection.group.graphql"
+        groupKey="inspection.group.graphql.apolloKotlin"
+        key="inspection.endpointNotConfigured.displayName"
+        enabledByDefault="true"
+        level="INFO"
+    />
+
+    <!-- Suppression of inspections on individual fields -->
+    <lang.inspectionSuppressor
+        language="GraphQL"
+        implementationClass="com.apollographql.ijplugin.inspection.GraphQLInspectionSuppressor"
     />
 
     <!-- Fields insights service (fetch and cache data) -->
@@ -131,11 +148,39 @@
         serviceImplementation="com.apollographql.ijplugin.studio.fieldinsights.FieldInsightsServiceImpl"
     />
 
+    <!-- Notifications -->
+    <notificationGroup
+        id="apollo.main"
+        displayType="BALLOON"
+        key="notification.group.apollo.main"
+    />
+
+    <notificationGroup
+        id="apollo.telemetry"
+        displayType="BALLOON"
+        key="notification.group.apollo.telemetry"
+    />
+
+    <!-- Error handler: open a GitHub issue -->
+    <errorHandler implementation="com.apollographql.ijplugin.error.GitHubIssueErrorReportSubmitter" />
+
+    <!-- Normalized cache viewer -->
+    <toolWindow
+        id="NormalizedCacheViewer"
+        factoryClass="com.apollographql.ijplugin.normalizedcache.NormalizedCacheToolWindowFactory"
+        icon="com.apollographql.ijplugin.icons.ApolloIcons.ToolWindow.NormalizedCacheViewer"
+        anchor="bottom"
+        canCloseContents="true"
+    />
   </extensions>
 
-  <!-- Contribute configuration to the GraphQL plugin -->
   <extensions defaultExtensionNs="com.intellij.lang.jsgraphql">
+    <!-- Contribute configuration to the GraphQL plugin -->
     <configContributor implementation="com.apollographql.ijplugin.graphql.ApolloGraphQLConfigContributor" />
+
+    <!-- Suppress redefinition errors for built-in GraphQL types/directives. -->
+    <!-- TODO: remove this once https://github.com/JetBrains/js-graphql-intellij-plugin/issues/665 is fixed -->
+    <errorFilter implementation="com.apollographql.ijplugin.graphql.BuiltInRedefinitionErrorFilter" />
   </extensions>
 
   <applicationListeners>
@@ -145,6 +190,7 @@
         topic="com.intellij.openapi.project.ProjectManagerListener"
     />
   </applicationListeners>
+
 
   <actions>
     <!-- Refactor / Apollo -->
@@ -157,32 +203,6 @@
       <add-to-group group-id="RefactoringMenu" anchor="last" />
     </group>
 
-    <!-- Refactor / Apollo / Migrate to Apollo Kotlin 3 -->
-    <action
-        id="ApolloV2ToV3MigrationAction"
-        class="com.apollographql.ijplugin.action.ApolloV2ToV3MigrationAction"
-    >
-      <add-to-group group-id="ApolloRefactorActionGroup" />
-    </action>
-
-    <!-- Refactor / Apollo / Migrate to Apollo Kotlin 4 -->
-    <action
-        id="ApolloV3ToV4MigrationAction"
-        class="com.apollographql.ijplugin.action.ApolloV3ToV4MigrationAction"
-    >
-      <add-to-group group-id="ApolloRefactorActionGroup" />
-    </action>
-
-    <!-- Refactor / Apollo / Migrate to operationBased Codegen -->
-    <!--suppress PluginXmlCapitalization -->
-    <action
-        id="CompatToOperationBasedCodegenMigrationAction"
-        class="com.apollographql.ijplugin.action.CompatToOperationBasedCodegenMigrationAction"
-    >
-      <add-to-group group-id="ApolloRefactorActionGroup" />
-    </action>
-
-
     <!-- Tools / Apollo -->
     <!--suppress PluginXmlCapitalization -->
     <group
@@ -193,6 +213,34 @@
     >
       <add-to-group group-id="ToolsMenu" anchor="last" />
     </group>
+
+    <!-- Refactor / Apollo / Migrate to Apollo Kotlin 3 (also in Tools / Apollo) -->
+    <action
+        id="ApolloV2ToV3MigrationAction"
+        class="com.apollographql.ijplugin.action.ApolloV2ToV3MigrationAction"
+    >
+      <add-to-group group-id="ApolloRefactorActionGroup" />
+      <add-to-group group-id="ApolloToolsActionGroup" />
+    </action>
+
+    <!-- Refactor / Apollo / Migrate to Apollo Kotlin 4 (also in Tools / Apollo) -->
+    <action
+        id="ApolloV3ToV4MigrationAction"
+        class="com.apollographql.ijplugin.action.ApolloV3ToV4MigrationAction"
+    >
+      <add-to-group group-id="ApolloRefactorActionGroup" />
+      <add-to-group group-id="ApolloToolsActionGroup" />
+    </action>
+
+    <!-- Refactor / Apollo / Migrate to operationBased Codegen (also in Tools / Apollo) -->
+    <!--suppress PluginXmlCapitalization -->
+    <action
+        id="CompatToOperationBasedCodegenMigrationAction"
+        class="com.apollographql.ijplugin.action.CompatToOperationBasedCodegenMigrationAction"
+    >
+      <add-to-group group-id="ApolloRefactorActionGroup" />
+      <add-to-group group-id="ApolloToolsActionGroup" />
+    </action>
 
     <!-- Tools / Apollo / Open in Apollo Sandbox -->
     <action
@@ -214,6 +262,53 @@
     >
       <add-to-group group-id="ApolloToolsActionGroup" />
     </action>
+
+    <!-- Tools / Apollo / Download schema -->
+    <action
+        id="DownloadSchemaAction"
+        class="com.apollographql.ijplugin.gradle.DownloadSchemaAction"
+    >
+      <add-to-group group-id="ApolloToolsActionGroup" />
+    </action>
+
+    <!-- Tools / Apollo / Normalized Cache Viewer -->
+    <action
+        id="ShowNormalizedCacheToolWindowAction"
+        class="com.apollographql.ijplugin.normalizedcache.ShowNormalizedCacheToolWindowAction"
+    >
+      <add-to-group group-id="ApolloToolsActionGroup" />
+    </action>
+
+    <!-- Tools / Apollo / Internal group that only appears when run from the IDE ("internal mode") -->
+    <!-- See https://plugins.jetbrains.com/docs/intellij/enabling-internal.html -->
+    <group
+        id="ApolloInternalActionGroup"
+        popup="true"
+        class="com.intellij.openapi.actionSystem.DefaultActionGroup"
+        internal="true"
+    >
+      <add-to-group group-id="ApolloToolsActionGroup" anchor="last" />
+    </group>
+
+    <!-- Tools / Apollo / Internal / Send telemetry -->
+    <action
+        id="SendTelemetryAction"
+        class="com.apollographql.ijplugin.telemetry.SendTelemetryAction"
+        internal="true"
+    >
+      <add-to-group group-id="ApolloInternalActionGroup" />
+    </action>
+
+    <!-- Tools / Apollo / Internal / Throw an exception -->
+    <action
+        id="ThrowAction"
+        class="com.apollographql.ijplugin.error.ThrowAction"
+        internal="true"
+    >
+      <add-to-group group-id="ApolloInternalActionGroup" />
+    </action>
+
+
   </actions>
 
 </idea-plugin>

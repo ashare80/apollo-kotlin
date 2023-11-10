@@ -12,8 +12,20 @@ import kotlin.jvm.JvmStatic
  * serialized (even if it's null) and the case where it's absent and shouldn't be serialized.
  */
 sealed class Optional<out V> {
-  fun getOrNull() = (this as? Present)?.value
-  fun getOrThrow() = getOrNull() ?: throw MissingValueException()
+  /**
+   * Returns the value if this [Optional] is [Present] or null else.
+   */
+  fun getOrNull(): V? = (this as? Present)?.value
+
+  /**
+   * Returns the value if this [Optional] is [Present] or throws [MissingValueException] else.
+   */
+  fun getOrThrow(): V {
+    if (this is Present) {
+      return value
+    }
+    throw MissingValueException()
+  }
 
   data class Present<V>(val value: V) : Optional<V>()
   object Absent : Optional<Nothing>()
@@ -29,3 +41,8 @@ sealed class Optional<out V> {
     fun <V : Any> presentIfNotNull(value: V?): Optional<V> = if (value == null) Absent else Present(value)
   }
 }
+
+/**
+ * Returns the value if this [Optional] is [Present] or null else.
+ */
+fun <V> Optional<V>.getOrElse(fallback: V): V = (this as? Present)?.value ?: fallback

@@ -1,4 +1,3 @@
-
 import com.android.build.api.dsl.LibraryExtension
 import com.android.build.gradle.BaseExtension
 import kotlinx.coroutines.runBlocking
@@ -19,8 +18,8 @@ import org.jetbrains.dokka.gradle.DokkaTaskPartial
 
 fun Project.configurePublishing() {
   apply {
-      plugin("signing")
-    }
+    plugin("signing")
+  }
   apply {
     plugin("maven-publish")
   }
@@ -49,6 +48,7 @@ fun Project.configureDokka() {
     dependsOn("assemble")
     notCompatibleWithConfigurationCache("See https://github.com/Kotlin/dokka/issues/1217")
   }
+
   tasks.withType(DokkaTaskPartial::class.java).configureEach {
     //https://github.com/Kotlin/dokka/issues/1455
     dependsOn("assemble")
@@ -59,6 +59,20 @@ fun Project.configureDokka() {
     pluginConfiguration<org.jetbrains.dokka.base.DokkaBase, org.jetbrains.dokka.base.DokkaBaseConfiguration> {
       customAssets = listOf("apollo.svg").map { rootProject.file("dokka/$it") }
       customStyleSheets = listOf("style.css", "prism.css", "logo-styles.css").map { rootProject.file("dokka/$it") }
+    }
+
+    /**
+     * Speed up development. When running the Gradle integration tests, we don't need KDoc to be generated
+     */
+    onlyIf {
+      if (gradle.taskGraph.allTasks.any {
+            it.name == "publishAllPublicationsToPluginTestRepository" ||
+                it.name == "publishToMavenLocal"
+          }) {
+        return@onlyIf false
+      }
+
+      true
     }
   }
 }
@@ -143,11 +157,13 @@ private fun Project.configurePublishingInternal() {
             }
           }
         }
+
         plugins.hasPlugin("com.gradle.plugin-publish") -> {
           /**
            * com.gradle.plugin-publish creates all publications
            */
         }
+
         plugins.hasPlugin("java-gradle-plugin") -> {
           /**
            * java-gradle-plugin creates 2 publications (one marker and one regular) but without source/javadoc.
@@ -204,7 +220,7 @@ private fun Project.configurePublishingInternal() {
     repositories {
       maven {
         name = "pluginTest"
-        url = uri("file://${rootProject.buildDir}/localMaven")
+        url = uri(rootProject.layout.buildDirectory.dir("localMaven"))
       }
 
       maven {

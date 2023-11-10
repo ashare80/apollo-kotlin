@@ -1,13 +1,11 @@
 plugins {
   id("org.jetbrains.kotlin.multiplatform")
-  id("apollo.library")
 }
 
-apolloLibrary {
-  mpp {
-    withLinux.set(false)
-  }
-}
+apolloLibrary(
+    javaModuleName = "com.apollographql.apollo3.testing",
+    withLinux = false,
+)
 
 kotlin {
   sourceSets {
@@ -32,7 +30,6 @@ kotlin {
 
     findByName("jsMain")?.apply {
       dependencies {
-        implementation(libs.kotlinx.nodejs)
         implementation(libs.kotlin.test.js)
         api(libs.okio.nodefilesystem)
       }

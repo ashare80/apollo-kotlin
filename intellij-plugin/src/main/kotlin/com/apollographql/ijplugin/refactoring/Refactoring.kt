@@ -7,13 +7,17 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMigration
 import com.intellij.psi.PsiPackage
 import com.intellij.psi.PsiReference
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.searches.AllClassesSearch
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.rename.RenamePsiElementProcessor
+import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.psi.psiUtil.findPropertyByName
 
 fun findOrCreatePackage(project: Project, migration: PsiMigration, qName: String): PsiPackage {
   val aPackage = JavaPsiFacade.getInstance(project).findPackage(qName)
@@ -49,16 +53,17 @@ fun findMethodReferences(
     className: String,
     methodName: String,
     extensionTargetClassName: String? = null,
+    methodPredicate: (PsiMethod) -> Boolean = { true },
 ): Collection<PsiReference> {
   val psiLookupClass = JavaPsiFacade.getInstance(project).findClass(className, GlobalSearchScope.allScope(project)) ?: return emptyList()
   val methods = psiLookupClass.findMethodsByName(methodName, false)
       .filter { method ->
-        if (extensionTargetClassName == null) return@filter true
+        if (extensionTargetClassName == null) return@filter methodPredicate(method)
         // In Kotlin extensions, the target is passed to the first parameter
         if (method.parameterList.parametersCount < 1) return@filter false
         val firstParameter = method.parameterList.parameters.first()
         val firstParameterType = (firstParameter.type as? PsiClassType)?.rawType()?.canonicalText
-        firstParameterType == extensionTargetClassName
+        firstParameterType == extensionTargetClassName && methodPredicate(method)
       }
   return methods.flatMap { method ->
     val processor = RenamePsiElementProcessor.forElement(method)
@@ -68,7 +73,10 @@ fun findMethodReferences(
 
 fun findFieldReferences(project: Project, className: String, fieldName: String): Collection<PsiReference> {
   val psiLookupClass = JavaPsiFacade.getInstance(project).findClass(className, GlobalSearchScope.allScope(project)) ?: return emptyList()
-  val field = psiLookupClass.findFieldByName(fieldName, true) ?: return emptyList()
+  val field = psiLookupClass.findFieldByName(fieldName, true)
+      // Fallback to Kotlin property
+      ?: (psiLookupClass as? KtLightClass)?.kotlinOrigin?.findPropertyByName(fieldName)
+      ?: return emptyList()
   val processor = RenamePsiElementProcessor.forElement(field)
   return processor.findReferences(field, GlobalSearchScope.projectScope(project), false)
 }
@@ -88,4 +96,8 @@ fun findInheritorsOfClass(project: Project, className: String): Collection<PsiCl
   val psiLookupClass = JavaPsiFacade.getInstance(project).findClass(className, GlobalSearchScope.allScope(project)) ?: return emptyList()
   // Using allScope for the search so all inheritors are found even if some of them are not in the project
   return ClassInheritorsSearch.search(psiLookupClass, GlobalSearchScope.allScope(project), true).toList()
+}
+
+fun findAllClasses(project: Project): Collection<PsiClass> {
+  return AllClassesSearch.search(GlobalSearchScope.projectScope(project), project).findAll()
 }

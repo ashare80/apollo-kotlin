@@ -1,8 +1,8 @@
+
 import JapiCmp.configureJapiCmp
-import java.util.Locale
 
 plugins {
-  id("apollo.library") apply false
+  id("build.logic") apply false
 }
 
 apply(plugin = "com.github.ben-manes.versions")
@@ -94,7 +94,7 @@ tasks.register("ciTestsNoGradle") {
   }
 }
 
-tasks.register("ciBuild") {
+val ciBuild = tasks.register("ciBuild") {
   description = "Execute the 'build' task in each subproject"
   dependsOn(subprojectTasks("build"))
 }
@@ -102,7 +102,7 @@ tasks.register("ciBuild") {
 rootProject.configureDokka()
 tasks.named("dokkaHtmlMultiModule").configure {
   this as org.jetbrains.dokka.gradle.DokkaMultiModuleTask
-  outputDirectory.set(buildDir.resolve("dokkaHtml/kdoc"))
+  outputDirectory.set(layout.buildDirectory.asFile.get().resolve("dokkaHtml/kdoc"))
 }
 
 tasks.named("dependencyUpdates").configure {
@@ -161,3 +161,5 @@ tasks.register("rmbuild") {
     }.count()
   }
 }
+
+rootSetup(ciBuild)

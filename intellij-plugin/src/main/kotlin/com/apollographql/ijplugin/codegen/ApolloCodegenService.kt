@@ -3,13 +3,14 @@ package com.apollographql.ijplugin.codegen
 import com.apollographql.ijplugin.gradle.CODEGEN_GRADLE_TASK_NAME
 import com.apollographql.ijplugin.gradle.GradleExecutionHelperCompat
 import com.apollographql.ijplugin.gradle.GradleHasSyncedListener
+import com.apollographql.ijplugin.gradle.SimpleProgressListener
 import com.apollographql.ijplugin.gradle.getGradleRootPath
 import com.apollographql.ijplugin.project.ApolloProjectListener
 import com.apollographql.ijplugin.project.ApolloProjectService
 import com.apollographql.ijplugin.project.apolloProjectService
-import com.apollographql.ijplugin.settings.SettingsListener
-import com.apollographql.ijplugin.settings.SettingsState
-import com.apollographql.ijplugin.settings.settingsState
+import com.apollographql.ijplugin.settings.ProjectSettingsListener
+import com.apollographql.ijplugin.settings.ProjectSettingsState
+import com.apollographql.ijplugin.settings.projectSettingsState
 import com.apollographql.ijplugin.util.apolloGeneratedSourcesRoots
 import com.apollographql.ijplugin.util.dispose
 import com.apollographql.ijplugin.util.isNotDisposed
@@ -19,6 +20,7 @@ import com.apollographql.ijplugin.util.newDisposable
 import com.apollographql.ijplugin.util.runWriteActionInEdt
 import com.intellij.lang.jsgraphql.GraphQLFileType
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.event.DocumentEvent
@@ -37,16 +39,12 @@ import com.intellij.openapi.util.CheckedDisposable
 import com.intellij.openapi.vfs.VfsUtil
 import org.gradle.tooling.CancellationTokenSource
 import org.gradle.tooling.GradleConnector
-import org.gradle.tooling.events.FailureResult
-import org.gradle.tooling.events.FinishEvent
-import org.gradle.tooling.events.ProgressListener
-import org.gradle.tooling.events.StartEvent
-import org.gradle.tooling.events.SuccessResult
 import org.jetbrains.kotlin.idea.configuration.GRADLE_SYSTEM_ID
 import org.jetbrains.plugins.gradle.settings.GradleExecutionSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.util.concurrent.Executors
 
+@Service(Service.Level.PROJECT)
 class ApolloCodegenService(
     private val project: Project,
 ) : Disposable {
@@ -64,7 +62,7 @@ class ApolloCodegenService(
     logd("project=${project.name}")
     startOrStopCodegenObservers()
     startObserveApolloProject()
-    startObservingSettings()
+    startObserveSettings()
   }
 
   private fun startObserveApolloProject() {
@@ -77,17 +75,17 @@ class ApolloCodegenService(
     })
   }
 
-  private fun startObservingSettings() {
+  private fun startObserveSettings() {
     logd()
-    project.messageBus.connect(this).subscribe(SettingsListener.TOPIC, object : SettingsListener {
-      override fun settingsChanged(settingsState: SettingsState) {
-        logd("settingsState=$settingsState")
+    project.messageBus.connect(this).subscribe(ProjectSettingsListener.TOPIC, object : ProjectSettingsListener {
+      override fun settingsChanged(projectSettingsState: ProjectSettingsState) {
+        logd("projectSettingsState=$projectSettingsState")
         startOrStopCodegenObservers()
       }
     })
   }
 
-  private fun shouldTriggerCodegenAutomatically() = project.apolloProjectService.apolloVersion.isAtLeastV3 && project.settingsState.automaticCodegenTriggering
+  private fun shouldTriggerCodegenAutomatically() = project.apolloProjectService.apolloVersion.isAtLeastV3 && project.projectSettingsState.automaticCodegenTriggering
 
   private fun startOrStopCodegenObservers() {
     if (shouldTriggerCodegenAutomatically()) {
@@ -197,27 +195,13 @@ class ApolloCodegenService(
               .forTasks(CODEGEN_GRADLE_TASK_NAME)
               .withCancellationToken(gradleCodegenCancellation!!.token())
               .addArguments("--continuous")
-              .addProgressListener(ProgressListener { event ->
-                when {
-                  event is StartEvent && event.descriptor.name == "Run build" -> {
-                    logd("Gradle build started")
-                  }
-
-                  event is FinishEvent && event.descriptor.name == "Run build" -> {
-                    when (val result = event.result) {
-                      is FailureResult -> {
-                        logd("Gradle build failed: ${result.failures.map { it.message }}")
-                      }
-
-                      is SuccessResult -> {
-                        logd("Gradle build success, marking generated source roots as dirty")
-                        // Mark the generated sources dirty so the files are visible to the IDE
-                        val generatedSourceRoots = modules.flatMap { it.apolloGeneratedSourcesRoots() }
-                        logd("Mark dirty $generatedSourceRoots")
-                        VfsUtil.markDirtyAndRefresh(true, true, true, *generatedSourceRoots.toTypedArray())
-                      }
-                    }
-                  }
+              .addProgressListener(object : SimpleProgressListener() {
+                override fun onSuccess() {
+                  logd("Gradle build success, marking generated source roots as dirty")
+                  // Mark the generated sources dirty so the files are visible to the IDE
+                  val generatedSourceRoots = modules.flatMap { it.apolloGeneratedSourcesRoots() }
+                  logd("Mark dirty $generatedSourceRoots")
+                  VfsUtil.markDirtyAndRefresh(true, true, true, *generatedSourceRoots.toTypedArray())
                 }
               })
               .run()

@@ -2,13 +2,16 @@ package com.apollographql.apollo3.compiler
 
 import com.tschuchort.compiletesting.KotlinCompilation
 import com.tschuchort.compiletesting.SourceFile
-import okio.Sink
 import okio.buffer
+import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.junit.Assert
 import java.io.File
 
 object KotlinCompiler {
-  fun assertCompiles(files: Set<File>, allWarningsAsErrors: Boolean) {
+  @OptIn(ExperimentalCompilerApi::class)
+  fun assertCompiles(
+      files: Set<File>,
+  ) {
     val kotlinFiles = files.map {
       SourceFile.fromPath(it)
     }.toList()
@@ -17,7 +20,6 @@ object KotlinCompiler {
       sources = kotlinFiles
 
       kotlincArguments = kotlincArguments + "-opt-in=kotlin.RequiresOptIn"
-      this.allWarningsAsErrors = allWarningsAsErrors
       inheritClassPath = true
       verbose = false
       messageOutputStream = okio.blackholeSink().buffer().outputStream()

@@ -5,14 +5,12 @@
 //
 package com.example.subscriptions.adapter
 
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.StringAdapter
 import com.apollographql.apollo3.api.json.JsonWriter
 import com.example.subscriptions.TestSubscription
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object TestSubscription_VariablesAdapter {
   @Suppress(
@@ -24,10 +22,8 @@ public object TestSubscription_VariablesAdapter {
     `value`: TestSubscription,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     writer.name("repo")
-    StringAdapter.toJson(writer, CustomScalarAdapters.Empty, value.repo)
+    StringAdapter.toJson(writer, customScalarAdapters, value.repo)
   }
 }

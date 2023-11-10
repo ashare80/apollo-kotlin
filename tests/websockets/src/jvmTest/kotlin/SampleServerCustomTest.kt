@@ -1,11 +1,9 @@
-import app.cash.turbine.test
 import com.apollographql.apollo.sample.server.SampleServer
 import com.apollographql.apollo3.ApolloClient
 import com.apollographql.apollo3.network.ws.WebSocketNetworkTransport
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
@@ -42,7 +40,7 @@ class SampleServerCustomTest {
         .build()
 
     runBlocking {
-      repeat(50) {id ->
+      repeat(50) { id ->
         launch {
           try {
             withTimeout(30_000) {

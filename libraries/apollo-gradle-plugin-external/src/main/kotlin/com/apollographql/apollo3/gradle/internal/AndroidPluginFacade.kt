@@ -1,6 +1,7 @@
 package com.apollographql.apollo3.gradle.internal
 
 import com.android.build.gradle.AppExtension
+import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.FeatureExtension
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.TestedExtension
@@ -46,6 +47,7 @@ private fun Project.getVariants(): NamedDomainObjectContainer<BaseVariant> {
     else -> error("Unsupported extension: $extension")
   }
 
+  @Suppress("USELESS_IS_CHECK", "KotlinRedundantDiagnosticSuppress")
   if (extension is TestedExtension) {
     extension.testVariants.all { variant ->
       container.add(variant)
@@ -167,3 +169,12 @@ fun connectToAllAndroidVariants(project: Project, outputDir: Provider<Directory>
     connectToAndroidSourceSet(project, "main", outputDir, taskProvider)
   }
 }
+
+internal val BaseExtension.minSdk: Int?
+  get() = defaultConfig?.minSdkVersion?.apiLevel
+
+internal val BaseExtension.targetSdk: Int?
+  get() = defaultConfig?.targetSdkVersion?.apiLevel
+
+internal val BaseExtension.pluginVersion: String
+  get() = com.android.builder.model.Version.ANDROID_GRADLE_PLUGIN_VERSION

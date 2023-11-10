@@ -1,7 +1,6 @@
 package com.apollographql.apollo3.network.ws
 
 import com.apollographql.apollo3.api.http.HttpHeader
-import com.apollographql.apollo3.internal.ChannelWrapper
 import io.ktor.http.Headers
 import io.ktor.http.URLBuilder
 import io.ktor.http.URLProtocol
@@ -19,7 +18,7 @@ import kotlin.coroutines.resumeWithException
 
 actual class DefaultWebSocketEngine : WebSocketEngine {
 
-  override suspend fun open(
+  actual override suspend fun open(
       url: String,
       headers: List<HttpHeader>,
   ): WebSocketConnection = open(Url(url), headers)
@@ -34,7 +33,7 @@ actual class DefaultWebSocketEngine : WebSocketEngine {
       }
     }.build()
     val socket = createWebSocket(newUrl.toString(), Headers.build { headers.forEach { append(it.name, it.value) } }).awaitConnection()
-    val messageChannel = ChannelWrapper(Channel<String>(Channel.UNLIMITED))
+    val messageChannel = Channel<String>(Channel.UNLIMITED)
     socket.onmessage = { messageEvent: MessageEvent ->
       val data = messageEvent.data
       if (data != null) {
@@ -65,7 +64,6 @@ actual class DefaultWebSocketEngine : WebSocketEngine {
         //close the message channel as well, since it is idempotent there is no harm
         messageChannel.close()
       }
-
     }
   }
 

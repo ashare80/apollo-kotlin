@@ -190,6 +190,30 @@ apollo {
 
 - Enum class names now have their first letter capitalized, as other generated types.
 - To avoid a name clash with the introspection type of the same name, the `__Schema` type is now generated in a `schema` subpackage (instead of `type`) when using the `generateSchema` option.
+- `addTypename = "ifFragments"` is deprecated as it could lead to cache misses for cache users:
+
+```graphql
+{
+  node(id: 42) {
+    # no fragment here means but we if we don't query __typename, the query below will emit a cache miss 
+    title
+    price
+  }
+}
+
+{
+  product(id: 42) {
+    # __typename is added here automatically
+    __typename
+    ... on Product {
+      title
+      price
+    }
+  }
+}
+```
+
+Instead, use `"always"` if you're using the cache or `"ifPolymorphic"` else. See [#3965](https://github.com/apollographql/apollo-kotlin/issues/3965) for more details.
 
 ## Cache
 
@@ -197,15 +221,17 @@ The normalized cache must be configured before the auto persisted queries, confi
 
 ## apollo-ast
 
-The AST classes (`GQLNode` and subclasses) as well as `Introspection` classes are not data classes anymore (see https://github.com/apollographql/apollo-kotlin/pull/4704/).
+The AST classes (`GQLNode` and subclasses) as well as `Introspection` classes are not data classes anymore (see https://github.com/apollographql/apollo-kotlin/pull/4704/). The class hierarchy has been tweaked so that `GQLNamed`, `GQLDescribed` and `GQLHasDirectives` are more consistently inherited from.
 
-`GQLSelectionSet` and `GQLArguments` are deprecated and removed from `GQLField`, `GQLInlineFragment` and other constructors. Use `.selections` directly
+`GQLSelectionSet` and `GQLArguments` are deprecated and removed from `GQLField` and `GQLInlineFragment`. Use `.selections` directly
 
-`GQLInlineFragment.typeCondition` is now nullable to account for inline fragments who inherit their type condition
+`GQLInlineFragment.typeCondition` is now nullable to account for inline fragments who inherit their type condition.
 
-`SourceLocation.position` is renamed `SourceLocation.column` and is now 1-indexed
+`SourceLocation.position` is renamed `SourceLocation.column` and is now 1-indexed. `GQLNode.sourceLocation` is now nullable to account for the cases where the nodes are constructed programmatically.
 
-`GQLNode.sourceLocation` is now nullable
+It is not possible to create a `Schema` from a File or String directly anymore. Instead, create a `GQLDocument` first and convert it to a schema with `toSchema()`.
+
+
 
 ## Gradle configuration
 

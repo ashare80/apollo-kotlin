@@ -1,8 +1,9 @@
 package com.apollographql.ijplugin.studio.fieldinsights
 
 import com.apollographql.ijplugin.ApolloBundle
+import com.apollographql.ijplugin.project.apolloProjectService
 import com.apollographql.ijplugin.settings.SettingsConfigurable
-import com.apollographql.ijplugin.settings.settingsState
+import com.apollographql.ijplugin.settings.projectSettingsState
 import com.apollographql.ijplugin.util.logd
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -15,7 +16,7 @@ class RefreshFieldInsightsAction : AnAction() {
     logd()
     val project = e.project ?: return
 
-    if (project.settingsState.apolloKotlinServiceConfigurations.isEmpty()) {
+    if (project.projectSettingsState.apolloKotlinServiceConfigurations.isEmpty()) {
       val okCancelResult = Messages.showOkCancelDialog(
           e.project,
           ApolloBundle.message("action.RefreshFieldInsightsAction.mustConfigureDialog.message"),
@@ -32,6 +33,10 @@ class RefreshFieldInsightsAction : AnAction() {
     }
 
     project.fieldInsightsService.fetchLatencies()
+  }
+
+  override fun update(e: AnActionEvent) {
+    e.presentation.isEnabled = e.project?.apolloProjectService?.apolloVersion?.isAtLeastV3 == true
   }
 
   override fun getActionUpdateThread() = ActionUpdateThread.BGT

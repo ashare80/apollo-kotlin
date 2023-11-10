@@ -8,7 +8,8 @@ import com.apollographql.apollo3.api.json.JsonWriter
 import com.apollographql.apollo3.integration.fullstack.LaunchDetailsByDateQuery
 import com.apollographql.apollo3.integration.fullstack.type.Date
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.testing.internal.runTest
 import com.example.MyDate
 import testFixtureToUtf8
@@ -24,7 +25,7 @@ class ScalarAdapterTest {
   }
 
   private suspend fun tearDown() {
-    mockServer.stop()
+    mockServer.close()
   }
 
   private object MyDateAdapter : Adapter<MyDate> {
@@ -40,7 +41,7 @@ class ScalarAdapterTest {
 
   @Test
   fun regularCustomScalarAdapter() = runTest(before = { setUp() }, after = { tearDown() }) {
-    mockServer.enqueue(testFixtureToUtf8("LaunchDetailsByDateResponse.json"))
+    mockServer.enqueueString(testFixtureToUtf8("LaunchDetailsByDateResponse.json"))
 
     val apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
@@ -49,7 +50,7 @@ class ScalarAdapterTest {
 
     val response = apolloClient.query(LaunchDetailsByDateQuery(MyDate(2001, 6, 23))).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     assertTrue(request.body.utf8().contains(""""variables":{"date":"2001-6-23"}"""))
 
     assertEquals(MyDate(1978, 4, 27), response.dataOrThrow().launchByDate?.date)

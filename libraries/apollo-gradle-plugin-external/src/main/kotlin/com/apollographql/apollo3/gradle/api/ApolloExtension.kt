@@ -1,8 +1,8 @@
 package com.apollographql.apollo3.gradle.api
 
-import com.apollographql.apollo3.annotations.ApolloExperimental
 import org.gradle.api.Action
 import org.gradle.api.provider.Property
+import java.io.File
 
 /**
  * The entry point for configuring the apollo plugin.
@@ -91,10 +91,9 @@ interface ApolloExtension {
   val generateSourcesDuringGradleSync: Property<Boolean>
 
   /**
-   * Whether to use Antlr to parse GraphQL document or a custom parser
-   *
-   * Default: true
+   * Returns a dependency that contains:
+   * - a generated .jar file containing a KSP processor specialized for the given schema, service and packageName
+   * - the apollo-ksp dependency
    */
-  @ApolloExperimental
-  val useAntlr: Property<Boolean>
+  fun apolloKspProcessor(schema: File, service: String, packageName: String): Any
 }

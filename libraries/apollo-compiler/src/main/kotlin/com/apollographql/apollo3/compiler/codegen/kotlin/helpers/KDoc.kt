@@ -4,6 +4,7 @@ import com.apollographql.apollo3.compiler.applyIf
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinResolver
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinSymbols
 import com.apollographql.apollo3.compiler.ir.IrEnum
+import com.squareup.kotlinpoet.Annotatable
 import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
@@ -36,6 +37,14 @@ internal fun ParameterSpec.Builder.maybeAddDescription(description: String?): Pa
   return addKdoc("%L", description)
 }
 
+internal fun FunSpec.Builder.maybeAddDescription(description: String?): FunSpec.Builder {
+  if (description.isNullOrBlank()) {
+    return this
+  }
+
+  return addKdoc("%L", description)
+}
+
 
 internal fun TypeSpec.Builder.maybeAddDeprecation(deprecationReason: String?): TypeSpec.Builder {
   if (deprecationReason.isNullOrBlank()) {
@@ -54,6 +63,14 @@ internal fun PropertySpec.Builder.maybeAddDeprecation(deprecationReason: String?
 }
 
 internal fun ParameterSpec.Builder.maybeAddDeprecation(deprecationReason: String?): ParameterSpec.Builder {
+  if (deprecationReason.isNullOrBlank()) {
+    return this
+  }
+
+  return addAnnotation(deprecatedAnnotation(deprecationReason))
+}
+
+internal fun FunSpec.Builder.maybeAddDeprecation(deprecationReason: String?): FunSpec.Builder {
   if (deprecationReason.isNullOrBlank()) {
     return this
   }
@@ -88,11 +105,20 @@ internal fun ParameterSpec.Builder.maybeAddRequiresOptIn(resolver: KotlinResolve
   return addAnnotation(AnnotationSpec.builder(annotation).build())
 }
 
+internal fun FunSpec.Builder.maybeAddRequiresOptIn(resolver: KotlinResolver, optInFeature: String?): FunSpec.Builder {
+  if (optInFeature.isNullOrBlank()) {
+    return this
+  }
+
+  val annotation = resolver.resolveRequiresOptInAnnotation() ?: return this
+  return addAnnotation(AnnotationSpec.builder(annotation).build())
+}
+
 internal val suppressDeprecationAnnotationSpec = AnnotationSpec.builder(KotlinSymbols.Suppress)
     .addMember("%S", "DEPRECATION")
     .build()
 
-internal fun FunSpec.Builder.maybeSuppressDeprecation(enumValues: List<IrEnum.Value>): FunSpec.Builder = applyIf(enumValues.any { !it.deprecationReason.isNullOrBlank() }) {
+internal fun <T: Annotatable.Builder<*>> T.maybeSuppressDeprecation(enumValues: List<IrEnum.Value>): T = applyIf(enumValues.any { !it.deprecationReason.isNullOrBlank() }) {
   addAnnotation(suppressDeprecationAnnotationSpec)
 }
 
@@ -102,10 +128,10 @@ internal fun requiresOptInAnnotation(annotation: ClassName): AnnotationSpec {
       .build()
 }
 
-internal fun FunSpec.Builder.maybeAddOptIn(
+internal fun <T: Annotatable.Builder<*>> T.maybeAddOptIn(
     resolver: KotlinResolver,
     enumValues: List<IrEnum.Value>,
-): FunSpec.Builder = applyIf(enumValues.any { !it.optInFeature.isNullOrBlank() }) {
+): T = applyIf(enumValues.any { !it.optInFeature.isNullOrBlank() }) {
   val annotation = resolver.resolveRequiresOptInAnnotation() ?: return@applyIf
   addAnnotation(requiresOptInAnnotation(annotation))
 }

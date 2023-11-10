@@ -9,7 +9,8 @@ import com.apollographql.apollo3.api.ExecutionOptions.Companion.CAN_BE_BATCHED
 import com.apollographql.apollo3.api.http.HttpHeader
 import com.apollographql.apollo3.api.json.jsonReader
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.testing.internal.runTest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -30,8 +31,8 @@ class QueryBatchingTest {
     mockServer = MockServer()
   }
 
-  private suspend fun tearDown() {
-    mockServer.stop()
+  private fun tearDown() {
+    mockServer.close()
     // This is important. JS will hang if the BatchingHttpInterceptor scope is not cancelled
     apolloClient.close()
   }
@@ -60,7 +61,7 @@ class QueryBatchingTest {
     [{"data":{"launch":{"id":"83"}}},{"data":{"launch":{"id":"84"}}}]
     """.trimIndent()
 
-    mockServer.enqueue(response)
+    mockServer.enqueueString(response)
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 1000)
@@ -79,7 +80,7 @@ class QueryBatchingTest {
     assertEquals("83", result1.await().data?.launch?.id)
     assertEquals("84", result2.await().data?.launch?.id)
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val requests = AnyAdapter.fromJson(Buffer().write(request.body).jsonReader(), CustomScalarAdapters.Empty)
 
     assertIs<List<Map<String, Any?>>>(requests)
@@ -89,14 +90,14 @@ class QueryBatchingTest {
 
     // Only one request must have been sent
     assertFails {
-      mockServer.takeRequest()
+      mockServer.awaitRequest()
     }
   }
 
   @Test
   fun queriesAreNotBatchedIfSubmittedFarApart() = runTest(before = { setUp() }, after = { tearDown() }) {
-    mockServer.enqueue("""[{"data":{"launch":{"id":"83"}}}]""")
-    mockServer.enqueue("""[{"data":{"launch":{"id":"84"}}}]""")
+    mockServer.enqueueString("""[{"data":{"launch":{"id":"83"}}}]""")
+    mockServer.enqueueString("""[{"data":{"launch":{"id":"84"}}}]""")
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 10)
@@ -114,14 +115,14 @@ class QueryBatchingTest {
     assertEquals("83", result1.await().data?.launch?.id)
     assertEquals("84", result2.await().data?.launch?.id)
 
-    mockServer.takeRequest()
-    mockServer.takeRequest()
+    mockServer.awaitRequest()
+    mockServer.awaitRequest()
   }
 
   @Test
   fun queriesCanBeOptOutOfBatching() = runTest(before = { setUp() }, after = { tearDown() }) {
-    mockServer.enqueue("""{"data":{"launch":{"id":"83"}}}""")
-    mockServer.enqueue("""[{"data":{"launch":{"id":"84"}}}]""")
+    mockServer.enqueueString("""{"data":{"launch":{"id":"83"}}}""")
+    mockServer.enqueueString("""[{"data":{"launch":{"id":"84"}}}]""")
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 1000)
@@ -143,8 +144,8 @@ class QueryBatchingTest {
     assertEquals("83", result1.await().data?.launch?.id)
     assertEquals("84", result2.await().data?.launch?.id)
 
-    mockServer.takeRequest()
-    mockServer.takeRequest()
+    mockServer.awaitRequest()
+    mockServer.awaitRequest()
   }
 
   @Test
@@ -153,7 +154,7 @@ class QueryBatchingTest {
     [{"data":{"launch":{"id":"83"}}},{"data":{"launch":{"id":"84"}}}]
     """.trimIndent()
 
-    mockServer.enqueue(response)
+    mockServer.enqueueString(response)
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 1000)
@@ -180,7 +181,7 @@ class QueryBatchingTest {
     assertEquals("83", result1.await().data?.launch?.id)
     assertEquals("84", result2.await().data?.launch?.id)
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val requests = AnyAdapter.fromJson(Buffer().write(request.body).jsonReader(), CustomScalarAdapters.Empty)
 
     assertIs<List<Map<String, Any?>>>(requests)
@@ -190,7 +191,7 @@ class QueryBatchingTest {
 
     // Only one request must have been sent
     assertFails {
-      mockServer.takeRequest()
+      mockServer.awaitRequest()
     }
   }
 
@@ -200,7 +201,7 @@ class QueryBatchingTest {
     [{"data":{"launch":{"id":"83"}}},{"data":{"launch":{"id":"84"}}}]
     """.trimIndent()
 
-    mockServer.enqueue(response)
+    mockServer.enqueueString(response)
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 1000)
@@ -221,10 +222,10 @@ class QueryBatchingTest {
     }
     result1.await()
     result2.await()
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     // Only one request must have been sent
     assertFails {
-      mockServer.takeRequest()
+      mockServer.awaitRequest()
     }
     assertTrue(request.headers["client0"] == "0")
     assertTrue(request.headers["client1"] == "1")
@@ -237,7 +238,7 @@ class QueryBatchingTest {
     [{"data":{"launch":{"id":"83"}}},{"data":{"launch":{"id":"84"}}}]
     """.trimIndent()
 
-    mockServer.enqueue(response)
+    mockServer.enqueueString(response)
     apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .httpBatching(batchIntervalMillis = 1000)
@@ -262,7 +263,7 @@ class QueryBatchingTest {
     }
     result1.await()
     result2.await()
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     assertTrue(request.headers["query1+query2-same-value"] == "0")
     assertFalse(request.headers.keys.contains("query1-only"))
     assertFalse(request.headers.keys.contains("query2-only"))

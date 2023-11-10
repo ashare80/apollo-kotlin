@@ -4,8 +4,10 @@ import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.Executable
 import com.apollographql.apollo3.api.Fragment
 import com.apollographql.apollo3.api.Operation
+import com.apollographql.apollo3.api.variables
 import com.apollographql.apollo3.cache.normalized.ApolloStore
 import com.apollographql.apollo3.cache.normalized.api.ApolloResolver
+import com.apollographql.apollo3.cache.normalized.api.CacheData
 import com.apollographql.apollo3.cache.normalized.api.CacheHeaders
 import com.apollographql.apollo3.cache.normalized.api.CacheKey
 import com.apollographql.apollo3.cache.normalized.api.CacheKeyGenerator
@@ -18,7 +20,8 @@ import com.apollographql.apollo3.cache.normalized.api.Record
 import com.apollographql.apollo3.cache.normalized.api.RecordMerger
 import com.apollographql.apollo3.cache.normalized.api.internal.OptimisticCache
 import com.apollographql.apollo3.cache.normalized.api.normalize
-import com.apollographql.apollo3.cache.normalized.api.readDataFromCache
+import com.apollographql.apollo3.cache.normalized.api.readDataFromCacheInternal
+import com.apollographql.apollo3.cache.normalized.api.toData
 import com.benasher44.uuid.Uuid
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -107,15 +110,16 @@ internal class DefaultApolloStore(
       customScalarAdapters: CustomScalarAdapters,
       cacheHeaders: CacheHeaders,
   ): D {
+    val variables = operation.variables(customScalarAdapters, true)
     return lock.read {
-      operation.readDataFromCacheInternal(
-          customScalarAdapters = customScalarAdapters,
+      operation.readDataFromCachePrivate(
           cache = cache,
           cacheResolver = cacheResolver,
           cacheHeaders = cacheHeaders,
-          cacheKey = CacheKey.rootKey()
+          cacheKey = CacheKey.rootKey(),
+          variables = variables
       )
-    }
+    }.toData(operation.adapter(), customScalarAdapters, variables)
   }
 
   override suspend fun <D : Fragment.Data> readFragment(
@@ -124,15 +128,17 @@ internal class DefaultApolloStore(
       customScalarAdapters: CustomScalarAdapters,
       cacheHeaders: CacheHeaders,
   ): D {
+    val variables = fragment.variables(customScalarAdapters, true)
+
     return lock.read {
-      fragment.readDataFromCacheInternal(
-          customScalarAdapters = customScalarAdapters,
+      fragment.readDataFromCachePrivate(
           cache = cache,
           cacheResolver = cacheResolver,
           cacheHeaders = cacheHeaders,
-          cacheKey = cacheKey
+          cacheKey = cacheKey,
+          variables = variables,
       )
-    }
+    }.toData(fragment.adapter(), customScalarAdapters, variables)
   }
 
 
@@ -167,15 +173,15 @@ internal class DefaultApolloStore(
       cacheHeaders: CacheHeaders,
       publish: Boolean,
   ): Set<String> {
-    val changedKeys = lock.write {
-      val records = fragment.normalize(
-          data = fragmentData,
-          customScalarAdapters = customScalarAdapters,
-          cacheKeyGenerator = cacheKeyGenerator,
-          metadataGenerator = metadataGenerator,
-          rootKey = cacheKey.key
-      ).values
+    val records = fragment.normalize(
+        data = fragmentData,
+        customScalarAdapters = customScalarAdapters,
+        cacheKeyGenerator = cacheKeyGenerator,
+        metadataGenerator = metadataGenerator,
+        rootKey = cacheKey.key
+    ).values
 
+    val changedKeys = lock.write {
       cache.merge(records, cacheHeaders, recordMerger)
     }
 
@@ -193,21 +199,22 @@ internal class DefaultApolloStore(
       publish: Boolean,
       customScalarAdapters: CustomScalarAdapters,
   ): Pair<Set<Record>, Set<String>> {
-    val (records, changedKeys) = lock.write {
-      val records = operation.normalize(
-          data = operationData,
-          customScalarAdapters = customScalarAdapters,
-          cacheKeyGenerator = cacheKeyGenerator,
-          metadataGenerator = metadataGenerator,
-      )
+    val records = operation.normalize(
+        data = operationData,
+        customScalarAdapters = customScalarAdapters,
+        cacheKeyGenerator = cacheKeyGenerator,
+        metadataGenerator = metadataGenerator,
+    ).values.toSet()
 
-      records to cache.merge(records.values.toList(), cacheHeaders, recordMerger)
+    val changedKeys = lock.write {
+      cache.merge(records, cacheHeaders, recordMerger)
     }
+
     if (publish) {
       publish(changedKeys)
     }
 
-    return records.values.toSet() to changedKeys
+    return records to changedKeys
   }
 
 
@@ -218,20 +225,20 @@ internal class DefaultApolloStore(
       customScalarAdapters: CustomScalarAdapters,
       publish: Boolean,
   ): Set<String> {
-    val changedKeys = lock.write {
-      val records = operation.normalize(
-          data = operationData,
-          customScalarAdapters = customScalarAdapters,
-          cacheKeyGenerator = cacheKeyGenerator,
-          metadataGenerator = metadataGenerator,
-      ).values.map { record ->
-        Record(
-            key = record.key,
-            fields = record.fields,
-            mutationId = mutationId
-        )
-      }
+    val records = operation.normalize(
+        data = operationData,
+        customScalarAdapters = customScalarAdapters,
+        cacheKeyGenerator = cacheKeyGenerator,
+        metadataGenerator = metadataGenerator,
+    ).values.map { record ->
+      Record(
+          key = record.key,
+          fields = record.fields,
+          mutationId = mutationId
+      )
+    }
 
+    val changedKeys = lock.write {
       /**
        * TODO: should we forward the cache headers to the optimistic store?
        */
@@ -260,7 +267,7 @@ internal class DefaultApolloStore(
     return changedKeys
   }
 
-  suspend fun merge(record: Record, cacheHeaders: CacheHeaders): Set<String> {
+  fun merge(record: Record, cacheHeaders: CacheHeaders): Set<String> {
     return lock.write {
       cache.merge(record, cacheHeaders, recordMerger)
     }
@@ -275,28 +282,28 @@ internal class DefaultApolloStore(
   override fun dispose() {}
 
   companion object {
-    private fun <D : Executable.Data> Executable<D>.readDataFromCacheInternal(
+    private fun <D : Executable.Data> Executable<D>.readDataFromCachePrivate(
         cacheKey: CacheKey,
-        customScalarAdapters: CustomScalarAdapters,
         cache: ReadOnlyNormalizedCache,
         cacheResolver: Any,
         cacheHeaders: CacheHeaders,
-    ): D {
+        variables: Executable.Variables,
+    ): CacheData {
       return when (cacheResolver) {
-        is CacheResolver -> readDataFromCache(
+        is CacheResolver -> readDataFromCacheInternal(
             cacheKey,
-            customScalarAdapters,
             cache,
             cacheResolver,
-            cacheHeaders
+            cacheHeaders,
+            variables
         )
 
-        is ApolloResolver -> readDataFromCache(
+        is ApolloResolver -> readDataFromCacheInternal(
             cacheKey,
-            customScalarAdapters,
             cache,
             cacheResolver,
-            cacheHeaders
+            cacheHeaders,
+            variables
         )
 
         else -> throw IllegalStateException()
@@ -304,4 +311,3 @@ internal class DefaultApolloStore(
     }
   }
 }
-

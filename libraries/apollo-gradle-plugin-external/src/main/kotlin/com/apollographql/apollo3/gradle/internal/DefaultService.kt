@@ -1,6 +1,8 @@
 package com.apollographql.apollo3.gradle.internal
 
 import com.apollographql.apollo3.annotations.ApolloDeprecatedSince
+import com.apollographql.apollo3.compiler.GeneratedMethod
+import com.apollographql.apollo3.compiler.JavaNullable
 import com.apollographql.apollo3.compiler.MANIFEST_NONE
 import com.apollographql.apollo3.compiler.MANIFEST_OPERATION_OUTPUT
 import com.apollographql.apollo3.compiler.MANIFEST_PERSISTED_QUERY
@@ -10,6 +12,7 @@ import com.apollographql.apollo3.compiler.PackageNameGenerator
 import com.apollographql.apollo3.compiler.Roots
 import com.apollographql.apollo3.compiler.TargetLanguage
 import com.apollographql.apollo3.compiler.defaultCodegenModels
+import com.apollographql.apollo3.compiler.defaultNullableFieldStyle
 import com.apollographql.apollo3.gradle.api.Introspection
 import com.apollographql.apollo3.gradle.api.RegisterOperationsConfig
 import com.apollographql.apollo3.gradle.api.Registry
@@ -35,8 +38,7 @@ abstract class DefaultService @Inject constructor(val project: Project, override
   var registered = false
 
   init {
-    @Suppress("LeakingThis")
-    @Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
+    @Suppress("LeakingThis", "NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
     if (GradleVersion.current() >= GradleVersion.version("6.2")) {
       // This allows users to call includes.put("Date", "java.util.Date")
       // see https://github.com/gradle/gradle/issues/7485
@@ -45,12 +47,14 @@ abstract class DefaultService @Inject constructor(val project: Project, override
       alwaysGenerateTypesMatching.convention(null as List<String>?)
       sealedClassesForEnumsMatching.convention(null as List<String>?)
       classesForEnumsMatching.convention(null as List<String>?)
+      generateMethods.convention(null as List<String>?)
     } else {
       includes.set(null as List<String>?)
       excludes.set(null as List<String>?)
       alwaysGenerateTypesMatching.set(null as List<String>?)
       sealedClassesForEnumsMatching.set(null as List<String>?)
       classesForEnumsMatching.set(null as List<String>?)
+      generateMethods.set(null as List<String>?)
     }
   }
 
@@ -118,13 +122,6 @@ abstract class DefaultService @Inject constructor(val project: Project, override
     check(!registered) {
       "Apollo: registerOperations {} cannot be configured outside of a service {} block"
     }
-
-    val existing = operationManifestFormat.orNull
-    check(existing == null || existing == MANIFEST_OPERATION_OUTPUT) {
-      "Apollo: registerOperation {} requires $MANIFEST_OPERATION_OUTPUT (found $existing)"
-    }
-    operationManifestFormat.set(MANIFEST_OPERATION_OUTPUT)
-    operationManifestFormat.finalizeValue()
 
     val registerOperationsConfig = objects.newInstance(DefaultRegisterOperationsConfig::class.java)
 
@@ -255,7 +252,7 @@ abstract class DefaultService @Inject constructor(val project: Project, override
     }
 
     return if (generateKotlinModels) {
-      getKotlinTargetLanguage(this.languageVersion.orNull)
+      getKotlinTargetLanguage(project, this.languageVersion.orNull)
     } else {
       TargetLanguage.JAVA
     }
@@ -277,6 +274,30 @@ abstract class DefaultService @Inject constructor(val project: Project, override
           """.trimMargin()))
     }
     return packageNameGenerator
+  }
+
+  internal fun generateMethods(): List<GeneratedMethod> {
+    val generateMethods = generateMethods.orNull?.map {
+      GeneratedMethod.fromName(it) ?: error("Apollo: unknown method type: $it for generateMethods")
+    } ?: return GeneratedMethod.defaultsFor(targetLanguage())
+
+    when(targetLanguage()) {
+      TargetLanguage.JAVA -> {
+        check(!generateMethods.contains(GeneratedMethod.DATA_CLASS)) {
+          "Java codegen does not support dataClass as an option for generateMethods"
+        }
+        check(!generateMethods.contains(GeneratedMethod.COPY)) {
+          "Java codegen does not support copy as an option for generateMethods"
+        }
+      }
+      else -> {
+        if (generateMethods.contains(GeneratedMethod.DATA_CLASS) && generateMethods.size > 1) {
+          error("Apollo: dataClass subsumes all other method types and must be the only option passed to generateMethods")
+        }
+      }
+    }
+
+    return generateMethods
   }
 
   internal fun jsExport(): Boolean {
@@ -339,7 +360,7 @@ abstract class DefaultService @Inject constructor(val project: Project, override
    * Resolves the operation manifest and formats.
    */
   @Suppress("DEPRECATION")
-  private fun resolveOperationManifest(): Pair<String, File> {
+  private fun resolveOperationManifest(): Pair<String, File?> {
     generateOperationOutput.disallowChanges()
     operationOutputFile.disallowChanges()
     operationManifest.disallowChanges()
@@ -379,7 +400,11 @@ abstract class DefaultService @Inject constructor(val project: Project, override
         format = MANIFEST_OPERATION_OUTPUT
       }
     } else {
-      userFile = BuildDirLayout.operationManifest(project, this, format ?: MANIFEST_OPERATION_OUTPUT)
+      userFile = if (format == null || format == MANIFEST_NONE) {
+        null
+      } else {
+        BuildDirLayout.operationManifest(project, this, format)
+      }
     }
 
     if (format == null) {
@@ -392,9 +417,7 @@ abstract class DefaultService @Inject constructor(val project: Project, override
     return project.provider {
       resolveOperationManifest().second
     }.let { fileProvider ->
-      project.objects.fileProperty().value {
-        fileProvider.get()
-      }
+      project.objects.fileProperty().fileProvider(fileProvider)
     }
   }
 

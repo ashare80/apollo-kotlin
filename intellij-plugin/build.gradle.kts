@@ -10,7 +10,10 @@ plugins {
   id("org.jetbrains.kotlin.jvm")
   id("org.jetbrains.intellij")
   id("maven-publish")
+  alias(libs.plugins.apollo.published)
 }
+
+commonSetup()
 
 // XXX: this should use the settings repositories instead
 repositories {
@@ -108,6 +111,9 @@ tasks {
     if (project.hasProperty("apolloIntellijPlugin.ideDir")) {
       ideDir.set(file(project.property("apolloIntellijPlugin.ideDir")!!))
     }
+
+    // Uncomment to disable internal mode - see https://plugins.jetbrains.com/docs/intellij/enabling-internal.html
+    // systemProperty("idea.is.internal", "false")
   }
 
   signPlugin {
@@ -118,10 +124,9 @@ tasks {
 
   publishPlugin {
     token.set(System.getenv("PUBLISH_TOKEN"))
-    // Currently we release to a specific "preview" release channel so the plugin is not listed on the Marketplace
-    // Change to "default" to release to the main channel.
-    // Read more: https://plugins.jetbrains.com/docs/intellij/deployment.html#specifying-a-release-channel
-    channels.set(listOf("preview"))
+    // Uncomment to release to the preview channel.
+    // Read more: https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html#specifying-a-release-channel
+    // channels.set(listOf("preview"))
   }
 
   // Log tests
@@ -135,7 +140,7 @@ tasks {
   }
 }
 
-val mockJdkRoot = buildDir.resolve("mockJDK")
+val mockJdkRoot = layout.buildDirectory.asFile.get().resolve("mockJDK")
 
 // Setup fake JDK for maven dependencies to work
 // See https://jetbrains-platform.slack.com/archives/CPL5291JP/p1664105522154139 and https://youtrack.jetbrains.com/issue/IJSDK-321
@@ -213,6 +218,27 @@ publishing {
 dependencies {
   implementation(project(":apollo-gradle-plugin-external"))
   implementation(project(":apollo-tooling"))
+  implementation(project(":apollo-normalized-cache-sqlite"))
+  implementation(libs.sqlite.jdbc)
+  implementation(libs.apollo.runtime.published)
 }
 
 fun isSnapshotBuild() = System.getenv("COM_APOLLOGRAPHQL_IJ_PLUGIN_SNAPSHOT").toBoolean()
+
+apollo {
+  service("apolloDebug") {
+    packageName.set("com.apollographql.apollo3.debug")
+    schemaFile.set(file("../libraries/apollo-debug-server/src/androidMain/resources/schema.graphqls"))
+    introspection {
+      endpointUrl.set("http://localhost:12200/")
+      schemaFile.set(file("../libraries/apollo-debug-server/src/androidMain/resources/schema.graphqls"))
+    }
+  }
+}
+
+// We're using project(":apollo-gradle-plugin-external") and the published "apollo-runtime" which do not have the same version
+tasks.configureEach {
+  if (name == "checkApolloVersions") {
+    enabled = false
+  }
+}

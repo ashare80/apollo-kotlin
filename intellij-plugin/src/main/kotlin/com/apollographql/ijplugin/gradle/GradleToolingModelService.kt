@@ -5,15 +5,17 @@ import com.apollographql.ijplugin.ApolloBundle
 import com.apollographql.ijplugin.project.ApolloProjectListener
 import com.apollographql.ijplugin.project.ApolloProjectService
 import com.apollographql.ijplugin.project.apolloProjectService
-import com.apollographql.ijplugin.settings.SettingsListener
-import com.apollographql.ijplugin.settings.SettingsState
-import com.apollographql.ijplugin.settings.settingsState
+import com.apollographql.ijplugin.settings.ProjectSettingsListener
+import com.apollographql.ijplugin.settings.ProjectSettingsState
+import com.apollographql.ijplugin.settings.projectSettingsState
+import com.apollographql.ijplugin.telemetry.telemetryService
 import com.apollographql.ijplugin.util.dispose
 import com.apollographql.ijplugin.util.isNotDisposed
 import com.apollographql.ijplugin.util.logd
 import com.apollographql.ijplugin.util.logw
 import com.apollographql.ijplugin.util.newDisposable
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListenerAdapter
@@ -36,6 +38,7 @@ import org.jetbrains.plugins.gradle.settings.GradleExecutionSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
 
+@Service(Service.Level.PROJECT)
 class GradleToolingModelService(
     private val project: Project,
 ) : Disposable {
@@ -50,7 +53,7 @@ class GradleToolingModelService(
     startObserveApolloProject()
     startOrStopObserveGradleHasSynced()
     startOrAbortFetchToolingModels()
-    startObservingSettings()
+    startObserveSettings()
   }
 
   private fun startObserveApolloProject() {
@@ -65,7 +68,7 @@ class GradleToolingModelService(
   }
 
   private fun shouldFetchToolingModels() = project.apolloProjectService.apolloVersion.isAtLeastV4 &&
-      project.settingsState.contributeConfigurationToGraphqlPlugin
+      project.projectSettingsState.contributeConfigurationToGraphqlPlugin
 
   private fun startOrStopObserveGradleHasSynced() {
     logd()
@@ -98,14 +101,14 @@ class GradleToolingModelService(
     gradleHasSyncedDisposable = null
   }
 
-  private fun startObservingSettings() {
+  private fun startObserveSettings() {
     logd()
-    project.messageBus.connect(this).subscribe(SettingsListener.TOPIC, object : SettingsListener {
-      private var contributeConfigurationToGraphqlPlugin: Boolean = project.settingsState.contributeConfigurationToGraphqlPlugin
+    project.messageBus.connect(this).subscribe(ProjectSettingsListener.TOPIC, object : ProjectSettingsListener {
+      private var contributeConfigurationToGraphqlPlugin: Boolean = project.projectSettingsState.contributeConfigurationToGraphqlPlugin
 
-      override fun settingsChanged(settingsState: SettingsState) {
-        val contributeConfigurationToGraphqlPluginChanged = contributeConfigurationToGraphqlPlugin != settingsState.contributeConfigurationToGraphqlPlugin
-        contributeConfigurationToGraphqlPlugin = settingsState.contributeConfigurationToGraphqlPlugin
+      override fun settingsChanged(projectSettingsState: ProjectSettingsState) {
+        val contributeConfigurationToGraphqlPluginChanged = contributeConfigurationToGraphqlPlugin != projectSettingsState.contributeConfigurationToGraphqlPlugin
+        contributeConfigurationToGraphqlPlugin = projectSettingsState.contributeConfigurationToGraphqlPlugin
         logd("contributeConfigurationToGraphqlPluginChanged=$contributeConfigurationToGraphqlPluginChanged")
         if (contributeConfigurationToGraphqlPluginChanged) {
           startOrAbortFetchToolingModels()
@@ -161,11 +164,14 @@ class GradleToolingModelService(
           gradleCancellation = null
         }
       } ?: return
+      project.telemetryService.gradleModuleCount = rootGradleProject.children.size + 1
 
       // We're only interested in projects that apply the Apollo plugin - and thus have the codegen task registered
       val allApolloGradleProjects: List<GradleProject> = (rootGradleProject.children + rootGradleProject)
           .filter { gradleProject -> gradleProject.tasks.any { task -> task.name == CODEGEN_GRADLE_TASK_NAME } }
       logd("allApolloGradleProjects=${allApolloGradleProjects.map { it.name }}")
+      project.telemetryService.apolloKotlinModuleCount = allApolloGradleProjects.size
+
       indicator.isIndeterminate = false
       val allToolingModels = allApolloGradleProjects.mapIndexedNotNull { index, gradleProject ->
         if (isAbortRequested()) return@run
@@ -197,6 +203,7 @@ class GradleToolingModelService(
       logd("allToolingModels=$allToolingModels")
       if (isAbortRequested()) return
       computeApolloKotlinServices(allToolingModels)
+      project.telemetryService.gradleToolingModels = allToolingModels.toSet()
     }
 
     private fun isAbortRequested(): Boolean {

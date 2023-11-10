@@ -7,7 +7,8 @@ import com.apollographql.apollo3.cache.http.isFromHttpCache
 import com.apollographql.apollo3.exception.ApolloParseException
 import com.apollographql.apollo3.exception.HttpCacheMissException
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.network.okHttpClient
 import com.apollographql.apollo3.testing.enqueueData
 import com.apollographql.apollo3.testing.internal.runTest
@@ -49,7 +50,7 @@ class HttpCacheTest {
 
   private suspend fun tearDown() {
     apolloClient.close()
-    mockServer.stop()
+    mockServer.close()
   }
 
   @Test
@@ -87,7 +88,7 @@ class HttpCacheTest {
   @Test
   fun NetworkOnly() = runTest(before = { before() }, after = { tearDown() }) {
     mockServer.enqueueData(data)
-    mockServer.enqueue(statusCode = 500)
+    mockServer.enqueueString(statusCode = 500)
 
     runBlocking {
       val response = apolloClient.query(GetRandomQuery()).execute()
@@ -106,7 +107,7 @@ class HttpCacheTest {
   @Test
   fun NetworkFirst() = runTest(before = { before() }, after = { tearDown() }) {
     mockServer.enqueueData(data)
-    mockServer.enqueue(statusCode = 500)
+    mockServer.enqueueString(statusCode = 500)
 
     runBlocking {
       var response = apolloClient.query(GetRandomQuery())
@@ -170,7 +171,7 @@ class HttpCacheTest {
     val okHttpClient = OkHttpClient.Builder().addInterceptor(interceptor).build()
 
     val mockServer = MockServer()
-    mockServer.enqueue(statusCode = 200)
+    mockServer.enqueueString(statusCode = 200)
     val apolloClient = ApolloClient.Builder()
         .serverUrl(mockServer.url())
         .okHttpClient(okHttpClient)
@@ -183,7 +184,7 @@ class HttpCacheTest {
           .execute()
     }
 
-    assertEquals("Test-Value", mockServer.takeRequest().headers["Test-Header"])
+    assertEquals("Test-Value", mockServer.awaitRequest().headers["Test-Header"])
   }
 
   @Test
@@ -191,7 +192,7 @@ class HttpCacheTest {
     val mutation = SetRandomMutation()
 
     repeat(2) {
-      mockServer.enqueue("""
+      mockServer.enqueueString("""
         {
           "data": {
             "setRandom": "42"
@@ -203,13 +204,13 @@ class HttpCacheTest {
           .execute()
 
       // The HTTP request should hit the network
-      mockServer.takeRequest()
+      mockServer.awaitRequest()
     }
   }
 
   @Test
   fun incompleteJsonIsNotCached() = runTest(before = { before() }, after = { tearDown() }) {
-    mockServer.enqueue("""{"data":""")
+    mockServer.enqueueString("""{"data":""")
     assertIs<ApolloParseException>(
         apolloClient.query(GetRandomQuery()).execute().exception
     )
@@ -221,7 +222,7 @@ class HttpCacheTest {
 
   @Test
   fun responseWithGraphQLErrorIsNotCached() = runTest(before = { before() }, after = { tearDown() }) {
-    mockServer.enqueue("""
+    mockServer.enqueueString("""
         {
           "data": {
             "random": 42

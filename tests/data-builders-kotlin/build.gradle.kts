@@ -1,8 +1,9 @@
 plugins {
   id("org.jetbrains.kotlin.jvm")
-  id("apollo.test")
   id("com.apollographql.apollo3")
 }
+
+apolloTest()
 
 dependencies {
   implementation("com.apollographql.apollo3:apollo-runtime")
@@ -18,5 +19,6 @@ apollo {
     addTypename.set("always")
     mapScalar("Long1", "com.example.MyLong", "com.example.MyLongAdapter")
     mapScalar("Long2", "com.example.MyLong")
+    languageVersion.set("1.5")
   }
 }

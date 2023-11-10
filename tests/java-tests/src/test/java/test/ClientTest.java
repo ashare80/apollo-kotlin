@@ -21,6 +21,7 @@ import com.apollographql.apollo3.cache.normalized.api.NormalizedCacheFactory;
 import com.apollographql.apollo3.cache.normalized.sql.SqlNormalizedCacheFactory;
 import com.apollographql.apollo3.mockserver.MockResponse;
 import com.apollographql.apollo3.mockserver.MockServer;
+import com.apollographql.apollo3.mockserver.MockServerKt;
 import com.apollographql.apollo3.network.http.ApolloClientAwarenessInterceptor;
 import com.apollographql.apollo3.network.http.BatchingHttpInterceptor;
 import com.apollographql.apollo3.network.http.HttpNetworkTransport;
@@ -47,7 +48,7 @@ public class ClientTest {
 
   @Before
   public void before() {
-    mockServer = new MockServer();
+    mockServer = MockServerKt.MockServer();
 
     /**
      * Because url doesn't suspend on the JVM, we can just use the return value

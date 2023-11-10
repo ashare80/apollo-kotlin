@@ -3,11 +3,9 @@ package com.apollographql.apollo3.compiler
 import com.apollographql.apollo3.ast.GQLDocument
 import com.apollographql.apollo3.ast.GQLFragmentDefinition
 import com.apollographql.apollo3.ast.GQLOperationDefinition
-import com.apollographql.apollo3.ast.builtinDefinitions
-import com.apollographql.apollo3.ast.toExecutableDefinitions
+import com.apollographql.apollo3.ast.toExecutableDocument
+import com.apollographql.apollo3.ast.toSchema
 import com.apollographql.apollo3.ast.toUtf8
-import com.apollographql.apollo3.ast.transformation.addRequiredFields
-import com.apollographql.apollo3.ast.introspection.toSchema
 import com.google.common.truth.Truth.assertThat
 import com.google.testing.junit.testparameterinjector.TestParameter
 import com.google.testing.junit.testparameterinjector.TestParameterInjector
@@ -17,7 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
-@Suppress("UNUSED_PARAMETER")
 @RunWith(TestParameterInjector::class)
 class TypenameTest(
     @TestParameter(valuesProvider = GraphQLFileValuesProvider::class) private val graphQLFile: File,
@@ -28,7 +25,7 @@ class TypenameTest(
     val schemaFile = File("src/test/graphql/schema.sdl")
     val schema = schemaFile.toSchema()
 
-    val definitions = graphQLFile.source().buffer().toExecutableDefinitions(schema)
+    val definitions = graphQLFile.source().buffer().toExecutableDocument(schema).definitions
 
     val fragments = definitions.filterIsInstance<GQLFragmentDefinition>().associateBy { it.name }
     val documentWithTypename = GQLDocument(
@@ -39,7 +36,7 @@ class TypenameTest(
             else -> it
           }
         },
-        filePath = null
+        sourceLocation = null
     ).toUtf8()
 
     val extra = when(addTypename) {

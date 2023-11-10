@@ -1,13 +1,11 @@
 package com.apollographql.apollo3.compiler.codegen.kotlin.model
 
-import com.apollographql.apollo3.compiler.TargetLanguage.KOTLIN_1_5
 import com.apollographql.apollo3.compiler.applyIf
 import com.apollographql.apollo3.compiler.codegen.CodegenLayout.Companion.upperCamelCaseIgnoringNonLetters
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinContext
-import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinMemberNames
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinSymbols
 import com.apollographql.apollo3.compiler.codegen.kotlin.adapter.from
-import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeDataClassFromProperties
+import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeClassFromProperties
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDeprecation
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDescription
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddJsExport
@@ -81,13 +79,17 @@ internal class ModelBuilder(
     val typeSpecBuilder = if (isInterface) {
       TypeSpec.interfaceBuilder(simpleName)
           // All interfaces can be sealed except if implementations exist in different packages (not allowed in Kotlin)
-          .applyIf(context.isTargetLanguageVersionAtLeast(KOTLIN_1_5) && hasSubclassesInSamePackage) {
+          .applyIf(hasSubclassesInSamePackage) {
             addModifiers(KModifier.SEALED)
           }
           .addProperties(properties)
     } else {
       TypeSpec.classBuilder(simpleName)
-          .makeDataClassFromProperties(properties)
+          .makeClassFromProperties(
+              context.generateMethods,
+              properties,
+              context.resolver.resolveModel(model.id)
+          )
     }
 
     val nestedTypes = nestedBuilders.map { it.build() }
@@ -118,11 +120,15 @@ internal class ModelBuilder(
   private fun buildAccessorFunSpecs(model: IrModel): List<FunSpec> {
     return model.accessors.map { accessor ->
 
+      val returnedClassName = context.resolver.resolveModel(accessor.returnedModelId)
       FunSpec.builder(accessor.funName())
           .applyIf(!context.jsExport) {
             receiver(context.resolver.resolveModel(model.id))
           }
-          .addCode("return·this as? %T\n", context.resolver.resolveModel(accessor.returnedModelId))
+          .returns(returnedClassName.copy(nullable = true))
+          .addAnnotation(AnnotationSpec.builder(KotlinSymbols.Suppress).addMember("%S", "USELESS_CAST").build())
+          // https://github.com/square/kotlinpoet/pull/1559
+          .addCode("return this as? %T\n", returnedClassName)
           .build()
     }
   }

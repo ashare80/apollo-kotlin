@@ -1,6 +1,7 @@
 package com.apollographql.ijplugin.navigation
 
 import com.apollographql.ijplugin.project.apolloProjectService
+import com.apollographql.ijplugin.telemetry.TelemetryEvent
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.lang.jsgraphql.psi.GraphQLElement
 import com.intellij.lang.jsgraphql.psi.GraphQLEnumTypeDefinition
@@ -69,10 +70,15 @@ class GraphQLGotoDeclarationHandler : GotoDeclarationHandler {
       val resolvedElement = sourceElement.parent?.reference?.resolve()
       if (resolvedElement != null) {
         add(resolvedElement)
+      } else {
+        // Special case for Fragment declaration: we switch to the Fragment's usages
+        if (gqlElement is GraphQLFragmentDefinition) {
+          addAll(findFragmentSpreads(gqlElement.project) { it.nameIdentifier.reference?.resolve() == gqlElement.nameIdentifier })
+        }
       }
 
       // Add Kotlin definition(s)
-      addAll(kotlinDefinitions)
+      addAll(kotlinDefinitions.map { it.logNavigation { TelemetryEvent.ApolloIjNavigateToKotlin() } })
     }.toTypedArray()
   }
 }

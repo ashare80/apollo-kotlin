@@ -37,6 +37,8 @@ internal object Identifier {
   const val document = "document"
   const val equals = "equals"
   const val hashCode = "hashCode"
+  const val toString = "toString"
+  const val copy = "copy"
   const val Data = "Data"
 
   const val cacheKeyForObject = "cacheKeyForObject"
@@ -57,6 +59,7 @@ internal object Identifier {
    */
   const val safeValueOf = "safeValueOf"
   const val knownValues = "knownValues"
+  const val knownEntries = "knownEntries"
 
   // extra underscores at the end to prevent potential name clashes
   const val UNKNOWN__ = "UNKNOWN__"

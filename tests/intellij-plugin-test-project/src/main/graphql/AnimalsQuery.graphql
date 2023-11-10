@@ -8,8 +8,10 @@ query animals {
     }
     ... on dog {
       id
+      # noinspection ApolloUnusedField
       barkVolume
       fieldOnDogAndCat
+      name
     }
   }
 }

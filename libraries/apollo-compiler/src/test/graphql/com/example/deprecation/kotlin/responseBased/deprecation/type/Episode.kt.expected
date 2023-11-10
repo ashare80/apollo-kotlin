@@ -10,35 +10,14 @@ import kotlin.Array
 import kotlin.Deprecated
 import kotlin.String
 import kotlin.Suppress
+import kotlin.collections.List
 
-/**
- * The episodes in the Star Wars trilogy
- */
 public enum class Episode(
   public val rawValue: String,
 ) {
-  /**
-   * Star Wars Episode IV: A New Hope, released in 1977.
-   */
-  NEWHOPE("NEWHOPE"),
-  /**
-   * Star Wars Episode V: The Empire Strikes Back, released in 1980.
-   */
-  EMPIRE("EMPIRE"),
-  /**
-   * Star Wars Episode VI: Return of the Jedi, released in 1983.
-   */
   JEDI("JEDI"),
-  /**
-   * Test deprecated enum value
-   */
-  @Deprecated(message = "For test purpose only")
-  DEPRECATED("DEPRECATED"),
-  /**
-   * Test java reserved word
-   */
-  @Deprecated(message = "For test purpose only")
-  new("new"),
+  @Deprecated(message = "No longer supported")
+  CLONES("CLONES"),
   /**
    * Auto generated constant for unknown enum values
    */
@@ -46,21 +25,27 @@ public enum class Episode(
   ;
 
   public companion object {
-    public val type: EnumType = EnumType("Episode", listOf("NEWHOPE", "EMPIRE", "JEDI",
-        "DEPRECATED", "new"))
+    public val type: EnumType = EnumType("Episode", listOf("JEDI", "CLONES"))
 
-    public fun safeValueOf(rawValue: String): Episode = values().find { it.rawValue == rawValue } ?:
-        UNKNOWN__
+    /**
+     * All [Episode] known at compile time
+     */
+    @Suppress("DEPRECATION")
+    public val knownEntries: List<Episode>
+      get() = listOf(
+        JEDI,
+        CLONES)
 
     /**
      * Returns all [Episode] known at compile time
      */
-    @Suppress("DEPRECATION")
-    public fun knownValues(): Array<Episode> = arrayOf(
-      NEWHOPE,
-      EMPIRE,
-      JEDI,
-      DEPRECATED,
-      new)
+    @Deprecated(
+      message = "Use knownEntries instead",
+      replaceWith = ReplaceWith("this.knownEntries"),
+    )
+    public fun knownValues(): Array<Episode> = knownEntries.toTypedArray()
+
+    public fun safeValueOf(rawValue: String): Episode = values().find { it.rawValue == rawValue } ?:
+        UNKNOWN__
   }
 }

@@ -34,7 +34,7 @@ fragment FullType on __Type {
     isDeprecated
     deprecationReason
   }
-  inputFields{
+  inputFields {
     ...InputValue
   }
   interfaces {

@@ -9,6 +9,7 @@ import com.intellij.openapi.roots.ContentEntry
 import com.intellij.openapi.roots.DependencyScope
 import com.intellij.openapi.roots.ModifiableRootModel
 import com.intellij.openapi.util.Segment
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiElement
@@ -17,8 +18,10 @@ import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import com.intellij.util.ui.UIUtil
+import junit.framework.AssertionFailedError
 import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import java.io.File
 
 @TestDataPath("\$CONTENT_ROOT/../../../tests/intellij-plugin-test-project")
 abstract class ApolloTestCase : LightJavaCodeInsightFixtureTestCase() {
@@ -98,13 +101,23 @@ abstract class ApolloTestCase : LightJavaCodeInsightFixtureTestCase() {
   protected fun doHighlighting(): List<HighlightInfo> {
     // Hack: sometimes doHighlighting fails with "AssertionError: PSI/document/model changes are not allowed during highlighting"
     // Wait a bit for project to settle and try again
+    return attempt(3) { myFixture.doHighlighting() }
+  }
+
+  protected fun checkHighlighting() {
+    attempt(3) { myFixture.checkHighlighting() }
+  }
+
+  private fun <T> attempt(times: Int, block: () -> T): T {
     var attempt = 1
     while (true) {
       try {
-        return myFixture.doHighlighting()
+        return block()
+      } catch (e: AssertionFailedError) {
+        throw e
       } catch (e: AssertionError) {
-        if (attempt <= 3) {
-          logw(e, "Highlighting attempt #$attempt failed, retrying")
+        if (attempt <= times) {
+          logw(e, "Attempt #$attempt failed, retrying")
           Thread.sleep(1000)
           attempt++
         } else {
@@ -116,4 +129,14 @@ abstract class ApolloTestCase : LightJavaCodeInsightFixtureTestCase() {
 
   protected val Segment.line: Int
     get() = StringUtil.offsetToLineNumber(myFixture.editor.document.text, startOffset) + 1
+
+  /**
+   * Load a .kts file and embed it inside a main function, so it becomes a valid .kt file.
+   * This is an unfortunately necessary hack when testing inspections on .kts files which, in some cases, doesn't work because the IDE
+   * doesn't register them in its scripting subsystem.
+   */
+  protected fun loadKtsAsKt(ktsFilePath: String): String {
+    val ktsFileContents = FileUtil.loadFile(File(getTestDataPath() + "/" + ktsFilePath), null)
+    return "fun main(){$ktsFileContents}"
+  }
 }

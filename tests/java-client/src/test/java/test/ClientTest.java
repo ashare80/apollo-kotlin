@@ -3,9 +3,10 @@ package test;
 import com.apollographql.apollo3.api.ApolloRequest;
 import com.apollographql.apollo3.api.ApolloResponse;
 import com.apollographql.apollo3.api.Operation;
-import com.apollographql.apollo3.mockserver.MockRequest;
+import com.apollographql.apollo3.mockserver.MockRequestBase;
 import com.apollographql.apollo3.mockserver.MockResponse;
 import com.apollographql.apollo3.mockserver.MockServer;
+import com.apollographql.apollo3.mockserver.MockServerKt;
 import com.apollographql.apollo3.runtime.java.ApolloCallback;
 import com.apollographql.apollo3.runtime.java.ApolloClient;
 import com.apollographql.apollo3.runtime.java.ApolloDisposable;
@@ -14,9 +15,9 @@ import com.apollographql.apollo3.runtime.java.interceptor.ApolloInterceptorChain
 import com.apollographql.apollo3.runtime.java.network.http.HttpInterceptor;
 import com.google.common.truth.Truth;
 import io.reactivex.rxjava3.annotations.NonNull;
-import javatest.CreateCatMutation;
+import scalars.CreateCatMutation;
 import javatest.GetRandomQuery;
-import javatest.LocationQuery;
+import scalars.LocationQuery;
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
@@ -38,7 +39,7 @@ public class ClientTest {
 
   @Before
   public void before() {
-    mockServer = new MockServer();
+    mockServer = MockServerKt.MockServer();
 
     /*
       Because url doesn't suspend on the JVM, we can just use the return value
@@ -98,7 +99,7 @@ public class ClientTest {
 
     mockServer.enqueue(new MockResponse.Builder().body("{\"data\": {\"random\": 42}}").build());
     blockingQuery(apolloClient, GetRandomQuery.builder().build());
-    MockRequest mockRequest = mockServer.takeRequest();
+    MockRequestBase mockRequest = mockServer.takeRequest();
     Truth.assertThat(mockRequest.getHeaders().get("interceptor1")).isEqualTo("true");
     Truth.assertThat(mockRequest.getHeaders().get("interceptor2")).isEqualTo("true");
     Truth.assertThat(mockRequest.getHeaders().get("interceptor3")).isEqualTo("true");
@@ -129,7 +130,7 @@ public class ClientTest {
 
     mockServer.enqueue(new MockResponse.Builder().body("{\"data\": {\"random\": 42}}").build());
     blockingQuery(apolloClient, GetRandomQuery.builder().build());
-    MockRequest mockRequest = mockServer.takeRequest();
+    MockRequestBase mockRequest = mockServer.takeRequest();
     Truth.assertThat(mockRequest.getHeaders().get("interceptor1")).isEqualTo("true");
     Truth.assertThat(mockRequest.getHeaders().get("interceptor2")).isEqualTo("true");
     Truth.assertThat(mockRequest.getHeaders().get("interceptor3")).isEqualTo("true");
@@ -139,7 +140,7 @@ public class ClientTest {
   public void scalarAdapters() {
     apolloClient = new ApolloClient.Builder()
         .serverUrl(mockServerUrl)
-        .addCustomScalarAdapter(javatest.type.GeoPoint.type, new GeoPointAdapter())
+        .addCustomScalarAdapter(scalars.type.GeoPoint.type, new GeoPointAdapter())
         .build();
 
     mockServer.enqueue(new MockResponse.Builder().body("{\"data\": {\"location\": {\"latitude\": 10.5, \"longitude\": 20.5}}}").build());

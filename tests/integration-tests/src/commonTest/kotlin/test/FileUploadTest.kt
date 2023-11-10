@@ -14,7 +14,8 @@ import com.apollographql.apollo3.integration.upload.type.NestedObject
 import com.apollographql.apollo3.internal.MultipartReader
 import com.apollographql.apollo3.mockserver.MockRequest
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.testing.internal.runTest
 import okio.Buffer
 import kotlin.test.Test
@@ -76,7 +77,7 @@ class FileUploadTest {
     mockServer = MockServer()
 
     // We only test the data that is sent to the server, we don't really mind the response
-    mockServer.enqueue("""
+    mockServer.enqueueString("""
       {
         "data": null
       }
@@ -85,8 +86,8 @@ class FileUploadTest {
     apolloClient = ApolloClient.Builder().serverUrl(mockServer.url()).build()
   }
 
-  private suspend fun tearDown() {
-    mockServer.stop()
+  private fun tearDown() {
+    mockServer.close()
   }
 
   @Test
@@ -94,7 +95,7 @@ class FileUploadTest {
   fun single() = runTest(before = { setUp() }, after = { tearDown() }) {
     apolloClient.mutation(mutationSingle).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val parts = request.parts()
 
     assertEquals(parts.size, 3)
@@ -109,7 +110,7 @@ class FileUploadTest {
   fun twice() = runTest(before = { setUp() }, after = { tearDown() }) {
     apolloClient.mutation(mutationTwice).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val parts = request.parts()
 
     assertEquals(parts.size, 4)
@@ -124,7 +125,7 @@ class FileUploadTest {
   fun multiple() = runTest(before = { setUp() }, after = { tearDown() }) {
     apolloClient.mutation(mutationMultiple).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val parts = request.parts()
     assertEquals(parts.size, 4)
     assertOperationsPart(parts[0], "expectedOperationsPartBodyMultiple.json")
@@ -139,7 +140,7 @@ class FileUploadTest {
   fun nested() = runTest(before = { setUp() }, after = { tearDown() }) {
     apolloClient.mutation(mutationNested).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val parts = request.parts()
     assertEquals(parts.size, 14)
     assertMapPart(parts[1], "expectedMapPartBodyNested.json")

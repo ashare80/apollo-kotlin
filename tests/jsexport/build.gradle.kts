@@ -1,12 +1,9 @@
 plugins {
   id("org.jetbrains.kotlin.multiplatform")
-  id("apollo.test")
   id("com.apollographql.apollo3")
 }
 
-apolloTest {
-  mpp {}
-}
+apolloTest()
 
 kotlin {
   sourceSets {
@@ -35,5 +32,6 @@ apollo {
     jsExport.set(true)
     codegenModels.set("responseBased")
     mapScalar("Point", "Point", "PointAdapter")
+    languageVersion.set("1.5")
   }
 }

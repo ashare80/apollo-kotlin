@@ -1,19 +1,18 @@
 package test
 
 import com.apollographql.apollo3.ApolloClient
+import com.apollographql.apollo3.annotations.ApolloInternal
 import com.apollographql.apollo3.exception.ApolloNetworkException
 import com.apollographql.apollo3.integration.normalizer.HeroNameQuery
+import com.apollographql.apollo3.mockserver.KtorTcpServer
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.mpp.currentTimeMillis
 import com.apollographql.apollo3.network.http.DefaultHttpEngine
 import com.apollographql.apollo3.network.http.get
 import com.apollographql.apollo3.testing.internal.runTest
-import platform.CFNetwork.kCFErrorDomainCFNetwork
-import platform.CFNetwork.kCFErrorHTTPSProxyConnectionFailure
-import platform.Foundation.CFBridgingRelease
 import platform.Foundation.NSError
-import platform.Foundation.NSURLErrorCannotFindHost
+import platform.Foundation.NSURLErrorCannotConnectToHost
 import platform.Foundation.NSURLErrorDomain
 import platform.Foundation.NSURLErrorTimedOut
 import kotlin.test.Test
@@ -26,7 +25,11 @@ import kotlin.test.fail
 class HttpEngineTest {
   @Test
   fun canReadNSError() = runTest {
-    val apolloClient = ApolloClient.Builder().serverUrl("https://inexistent.host/graphql").build()
+    /**
+     * Try to trigger an error wihtout having to wait 60s on a timeout.
+     * Hopefully Port 1 is closed on most machines. If that's not enough, we'd need to find an instrumented server
+     */
+    val apolloClient = ApolloClient.Builder().serverUrl("https://127.0.0.1:1/graphql").build()
 
     val response = apolloClient.query(HeroNameQuery()).execute()
     val apolloNetworkException = response.exception
@@ -38,31 +41,28 @@ class HttpEngineTest {
     // assertIs<NSError>(cause)
     check(cause is NSError)
 
-    assertTrue(
-        when {
-          // Happens locally if a proxy is running
-          cause.domain == (CFBridgingRelease(kCFErrorDomainCFNetwork) as String) && cause.code == kCFErrorHTTPSProxyConnectionFailure.toLong() -> true
-          // Default case
-          cause.domain == NSURLErrorDomain && cause.code == NSURLErrorCannotFindHost -> true
-          else -> false
-        }
-    )
+    assertEquals(cause.domain, NSURLErrorDomain)
+    assertEquals(cause.code, NSURLErrorCannotConnectToHost)
   }
 
+  @OptIn(ApolloInternal::class)
   @Test
   fun connectTimeoutIsWorking() = runTest {
-    val mockServer = MockServer(2_000)
+    val mockServer = MockServer.Builder()
+        .tcpServer(KtorTcpServer(acceptDelayMillis = 2_000))
+        .build()
+
     // Enqueue a trivial response to not crash in the mockServer
-    mockServer.enqueue("")
+    mockServer.enqueueString("")
 
     assertTimeout(mockServer)
   }
 
   @Test
   fun readTimeoutIsWorking() = runTest {
-    val mockServer = MockServer(0)
+    val mockServer = MockServer()
     // Enqueue a response with a 2 seconds delay
-    mockServer.enqueue("", 2_000)
+    mockServer.enqueueString("", 2_000)
 
     assertTimeout(mockServer)
   }
@@ -90,6 +90,6 @@ class HttpEngineTest {
      */
     assertTrue(after - before >= 1000)
     assertTrue(after - before <= 1500)
-    mockServer.stop()
+    mockServer.close()
   }
 }

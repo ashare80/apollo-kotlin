@@ -2,6 +2,7 @@ package com.apollographql.apollo3.compiler.codegen.kotlin.file
 
 import com.apollographql.apollo3.ast.QueryDocumentMinifier
 import com.apollographql.apollo3.compiler.applyIf
+import com.apollographql.apollo3.compiler.capitalizeFirstLetter
 import com.apollographql.apollo3.compiler.codegen.Identifier.OPERATION_DOCUMENT
 import com.apollographql.apollo3.compiler.codegen.Identifier.OPERATION_ID
 import com.apollographql.apollo3.compiler.codegen.Identifier.OPERATION_NAME
@@ -10,9 +11,10 @@ import com.apollographql.apollo3.compiler.codegen.Identifier.id
 import com.apollographql.apollo3.compiler.codegen.Identifier.name
 import com.apollographql.apollo3.compiler.codegen.kotlin.CgFile
 import com.apollographql.apollo3.compiler.codegen.kotlin.CgFileBuilder
+import com.apollographql.apollo3.compiler.codegen.kotlin.CgImport
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinContext
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinSymbols
-import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeDataClass
+import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeClassFromParameters
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDescription
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddJsExport
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.toNamedType
@@ -38,6 +40,7 @@ internal class OperationBuilder(
     flatten: Boolean,
     private val addJvmOverloads: Boolean,
     val generateDataBuilders: Boolean,
+    val generateInputBuilders: Boolean
 ) : CgFileBuilder {
   private val layout = context.layout
   private val packageName = layout.operationPackageName(operation.filePath)
@@ -72,19 +75,38 @@ internal class OperationBuilder(
   }
 
   override fun build(): CgFile {
+    val className = context.resolver.resolveSchemaType(operation.typeCondition)
     return CgFile(
         packageName = packageName,
         fileName = simpleName,
-        typeSpecs = listOf(typeSpec())
+        typeSpecs = listOf(typeSpec()),
+        imports = listOf(
+            CgImport(
+                className,
+            "Compiled${className.simpleName.capitalizeFirstLetter()}"
+            )
+
+        )
     )
   }
 
   fun typeSpec(): TypeSpec {
+    val namedTypes = operation.variables.map { it.toNamedType() }
     return TypeSpec.classBuilder(layout.operationName(operation))
         .addSuperinterface(superInterfaceType())
         .maybeAddDescription(operation.description)
-        .makeDataClass(operation.variables.map { it.toNamedType().toParameterSpec(context) }, addJvmOverloads)
+        .makeClassFromParameters(
+            context.generateMethods,
+            namedTypes.map { it.toParameterSpec(context, true) },
+            addJvmOverloads,
+            className = context.resolver.resolveOperation(operation.name)
+        )
         .maybeAddJsExport(context)
+        .apply {
+          if (namedTypes.isNotEmpty() && generateInputBuilders) {
+            addType(namedTypes.builderTypeSpec(context, ClassName(packageName, simpleName)))
+          }
+        }
         .addFunction(operationIdFunSpec())
         .addFunction(queryDocumentFunSpec(generateQueryDocument))
         .addFunction(nameFunSpec())
@@ -187,10 +209,12 @@ internal class OperationBuilder(
 
 
   /**
-   * Things like `[${'$'}oo]` do not compile. See https://youtrack.jetbrains.com/issue/KT-43906
+   * Things like `[${'$'}oo]` do not compile.
+   *
+   * See https://youtrack.jetbrains.com/issue/KT-43906
    */
   private fun String.escapeKdoc(): String {
-    return replace("[", "\\[").replace("]", "\\]")
+    return "```\n$this\n```\n"
   }
 
   private fun rootFieldFunSpec(): FunSpec {

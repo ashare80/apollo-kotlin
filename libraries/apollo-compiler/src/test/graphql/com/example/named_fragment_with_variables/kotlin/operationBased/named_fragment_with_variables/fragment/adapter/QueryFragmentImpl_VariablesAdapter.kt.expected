@@ -5,7 +5,6 @@
 //
 package com.example.named_fragment_with_variables.fragment.adapter
 
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.IntAdapter
 import com.apollographql.apollo3.api.StringAdapter
@@ -15,7 +14,6 @@ import com.example.named_fragment_with_variables.fragment.QueryFragmentImpl
 import com.example.named_fragment_with_variables.type.adapter.UserQuery_InputAdapter
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object QueryFragmentImpl_VariablesAdapter {
   @Suppress(
@@ -27,14 +25,12 @@ public object QueryFragmentImpl_VariablesAdapter {
     `value`: QueryFragmentImpl,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     writer.name("organizationId")
-    StringAdapter.toJson(writer, CustomScalarAdapters.Empty, value.organizationId)
+    StringAdapter.toJson(writer, customScalarAdapters, value.organizationId)
     writer.name("query")
-    UserQuery_InputAdapter.obj().toJson(writer, value.query, adapterContext)
+    UserQuery_InputAdapter.obj().toJson(writer, customScalarAdapters, value.query)
     writer.name("size")
-    IntAdapter.toJson(writer, CustomScalarAdapters.Empty, value.size)
+    IntAdapter.toJson(writer, customScalarAdapters, value.size)
   }
 }

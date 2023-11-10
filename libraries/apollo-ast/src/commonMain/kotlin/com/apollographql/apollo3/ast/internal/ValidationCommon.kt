@@ -1,5 +1,6 @@
 package com.apollographql.apollo3.ast.internal
 
+import com.apollographql.apollo3.ast.DeprecatedUsage
 import com.apollographql.apollo3.ast.GQLArgument
 import com.apollographql.apollo3.ast.GQLDirective
 import com.apollographql.apollo3.ast.GQLDirectiveDefinition
@@ -19,7 +20,6 @@ import com.apollographql.apollo3.ast.GQLNonNullType
 import com.apollographql.apollo3.ast.GQLNullValue
 import com.apollographql.apollo3.ast.GQLObjectTypeDefinition
 import com.apollographql.apollo3.ast.GQLOperationDefinition
-import com.apollographql.apollo3.ast.GQLOperationTypeDefinition
 import com.apollographql.apollo3.ast.GQLScalarTypeDefinition
 import com.apollographql.apollo3.ast.GQLSchemaDefinition
 import com.apollographql.apollo3.ast.GQLSchemaExtension
@@ -28,18 +28,18 @@ import com.apollographql.apollo3.ast.GQLTypeDefinition
 import com.apollographql.apollo3.ast.GQLUnionTypeDefinition
 import com.apollographql.apollo3.ast.GQLVariableDefinition
 import com.apollographql.apollo3.ast.Issue
+import com.apollographql.apollo3.ast.OtherValidationIssue
 import com.apollographql.apollo3.ast.Schema
 import com.apollographql.apollo3.ast.Schema.Companion.TYPE_POLICY
 import com.apollographql.apollo3.ast.SourceLocation
-import com.apollographql.apollo3.ast.ValidationDetails
+import com.apollographql.apollo3.ast.UnknownDirective
 import com.apollographql.apollo3.ast.VariableUsage
 import com.apollographql.apollo3.ast.findDeprecationReason
 import com.apollographql.apollo3.ast.isVariableUsageAllowed
 import com.apollographql.apollo3.ast.parseAsGQLSelections
 import com.apollographql.apollo3.ast.pretty
-import okio.Buffer
 
-interface IssuesScope {
+internal interface IssuesScope {
   val issues: MutableList<Issue>
 }
 
@@ -67,15 +67,11 @@ internal interface ValidationScope : IssuesScope {
   fun registerIssue(
       message: String,
       sourceLocation: SourceLocation?,
-      severity: Issue.Severity = Issue.Severity.ERROR,
-      details: ValidationDetails = ValidationDetails.Other,
   ) {
     issues.add(
-        Issue.ValidationError(
+        OtherValidationIssue(
             message,
             sourceLocation,
-            severity,
-            details
         )
     )
   }
@@ -105,7 +101,7 @@ internal fun ValidationScope.validateDirective(
     is GQLInlineFragment -> GQLDirectiveLocation.INLINE_FRAGMENT
     is GQLFragmentSpread -> GQLDirectiveLocation.FRAGMENT_SPREAD
     is GQLObjectTypeDefinition -> GQLDirectiveLocation.OBJECT
-    is GQLOperationTypeDefinition -> {
+    is GQLOperationDefinition -> {
       when (directiveContext.operationType) {
         "query" -> GQLDirectiveLocation.QUERY
         "mutation" -> GQLDirectiveLocation.MUTATION
@@ -130,13 +126,7 @@ internal fun ValidationScope.validateDirective(
   val directiveDefinition = directiveDefinitions[directive.name]
 
   if (directiveDefinition == null) {
-    // TODO: make this an error
-    registerIssue(
-        message = "Unknown directive '@${directive.name}'",
-        sourceLocation = directive.sourceLocation,
-        details = ValidationDetails.UnknownDirective,
-        severity = Issue.Severity.WARNING
-    )
+    issues.add(UnknownDirective("Unknown directive '@${directive.name}'", directive.sourceLocation))
 
     return
   }
@@ -164,8 +154,8 @@ internal fun ValidationScope.validateDirective(
   if (originalDirectiveName(directive.name) == Schema.NONNULL) {
     extraValidateNonNullDirective(directive, directiveContext)
   }
-  if (originalDirectiveName(directive.name) == Schema.FIELD_POLICY) {
-    extraValidateTypePolicyDirective(directive)
+  if (originalDirectiveName(directive.name) == TYPE_POLICY) {
+    extraValidateTypePolicyDirective(directive, directiveContext)
   }
 }
 
@@ -186,7 +176,7 @@ internal fun ValidationScope.extraValidateNonNullDirective(directive: GQLDirecti
     )
     val stringValue = (directive.arguments.first().value as GQLStringValue).value
 
-    val selections = stringValue.buffer().parseAsGQLSelections().getOrThrow()
+    val selections = stringValue.parseAsGQLSelections().getOrThrow()
 
     val badSelection = selections.firstOrNull { it !is GQLField }
     check(badSelection == null) {
@@ -206,17 +196,46 @@ internal fun ValidationScope.extraValidateNonNullDirective(directive: GQLDirecti
 /**
  * Extra Apollo-specific validation for @typePolicy
  */
-internal fun ValidationScope.extraValidateTypePolicyDirective(directive: GQLDirective) {
-  (directive.arguments.first().value as GQLStringValue).value.buffer().parseAsGQLSelections().getOrThrow().forEach {
-    if (it !is GQLField) {
-      registerIssue("Fragments are not supported in @$TYPE_POLICY directives", it.sourceLocation)
-    } else if (it.selections.isNotEmpty()) {
-      registerIssue("Composite fields are not supported in @$TYPE_POLICY directives", it.sourceLocation)
+internal fun ValidationScope.extraValidateTypePolicyDirective(directive: GQLDirective, directiveContext: GQLNode) {
+  val keyFieldsArg = directive.arguments.firstOrNull { it.name == "keyFields" }
+  if (keyFieldsArg == null) {
+    return
+  }
+
+  val fieldDefinitions: List<GQLFieldDefinition>
+  val type: String
+  when(directiveContext) {
+    is GQLInterfaceTypeDefinition -> {
+      fieldDefinitions = directiveContext.fields
+      type = directiveContext.name
+    }
+    is GQLObjectTypeDefinition -> {
+      fieldDefinitions = directiveContext.fields
+      type = directiveContext.name
+    }
+    is GQLUnionTypeDefinition -> {
+      fieldDefinitions = emptyList()
+      type = directiveContext.name
+    }
+    else -> {
+      // Should be caught by previous validation steps
+      error("")
+    }
+  }
+
+  (keyFieldsArg.value as GQLStringValue).value.parseAsGQLSelections().getOrThrow().forEach { selection ->
+    if (selection !is GQLField) {
+      registerIssue("Fragments are not supported in @$TYPE_POLICY directives", keyFieldsArg.sourceLocation)
+    } else if (selection.selections.isNotEmpty()) {
+      registerIssue("Composite fields are not supported in @$TYPE_POLICY directives", keyFieldsArg.sourceLocation)
+    } else {
+      val definition = fieldDefinitions.firstOrNull { it.name ==  selection.name}
+      if (definition == null) {
+        registerIssue("Field '${selection.name}' is not a valid key field for type '$type'", keyFieldsArg.sourceLocation)
+      }
     }
   }
 }
-
-internal fun String.buffer() = Buffer().writeUtf8(this)
 
 private fun ValidationScope.validateArgument(
     argument: GQLArgument,
@@ -230,7 +249,7 @@ private fun ValidationScope.validateArgument(
     return@with
   }
   if (schemaArgument.directives.findDeprecationReason() != null) {
-    issues.add(Issue.DeprecatedUsage(message = "Use of deprecated argument `$name`", sourceLocation = sourceLocation))
+    issues.add(DeprecatedUsage(message = "Use of deprecated argument `$name`", sourceLocation = sourceLocation))
   }
 
   // 5.6.2 Input Object Field Names

@@ -5,7 +5,6 @@
 //
 package com.example.hero_name_query_long_name.adapter
 
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.Optional
 import com.apollographql.apollo3.api.json.JsonWriter
@@ -15,7 +14,6 @@ import com.example.hero_name_query_long_name.TestQueryWithAVeryAVeryAVeryAVeryAV
 import com.example.hero_name_query_long_name.type.adapter.Episode_ResponseAdapter
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object
     TestQueryWithAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryLongName_VariablesAdapter
@@ -29,14 +27,12 @@ public object
     `value`: TestQueryWithAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryLongName,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     if
         (value.episodeAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryLongName
         is Optional.Present) {
       writer.name("episodeAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryLongName")
-      Episode_ResponseAdapter.nullable().present().toJson(writer, CustomScalarAdapters.Empty,
+      Episode_ResponseAdapter.nullable().present().toJson(writer, customScalarAdapters,
           value.episodeAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryAVeryLongName)
     }
   }

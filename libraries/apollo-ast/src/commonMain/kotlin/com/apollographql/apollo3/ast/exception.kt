@@ -5,8 +5,7 @@ import okio.IOException
 import okio.Path.Companion.toPath
 import okio.buffer
 
-
-expect internal val HOST_FILESYSTEM: FileSystem
+internal expect val HOST_FILESYSTEM: FileSystem
 
 open class SourceAwareException(
     val error: String,
@@ -52,13 +51,6 @@ open class SourceAwareException(
     }
   }
 }
-
-/**
- * Something went wrong while building the GraphQL AST, analyzing the schema, ...
- *
- * This most likely a bug. For an example, an Antlr rule was added to the grammar but the Kotlin code does not handle it
- */
-class UnrecognizedAntlrRule(error: String, sourceLocation: SourceLocation?) : SourceAwareException(error, sourceLocation)
 
 /**
  * An exception while converting to/from introspection

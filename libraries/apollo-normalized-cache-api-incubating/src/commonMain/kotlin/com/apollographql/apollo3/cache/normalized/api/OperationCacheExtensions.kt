@@ -1,10 +1,12 @@
 package com.apollographql.apollo3.cache.normalized.api
 
 import com.apollographql.apollo3.annotations.ApolloExperimental
+import com.apollographql.apollo3.annotations.ApolloInternal
+import com.apollographql.apollo3.api.CompositeAdapter
+import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.Executable
 import com.apollographql.apollo3.api.Operation
-import com.apollographql.apollo3.api.fromJson
 import com.apollographql.apollo3.api.json.MapJsonReader
 import com.apollographql.apollo3.api.json.MapJsonWriter
 import com.apollographql.apollo3.api.toJson
@@ -57,13 +59,12 @@ fun <D : Executable.Data> Executable<D>.normalize(
       .normalize(writer.root() as Map<String, Any?>, rootField().selections, rootField().type.rawType())
 }
 
-
 fun <D : Executable.Data> Executable<D>.readDataFromCache(
     customScalarAdapters: CustomScalarAdapters,
     cache: ReadOnlyNormalizedCache,
     cacheResolver: CacheResolver,
     cacheHeaders: CacheHeaders,
-) = readInternal(
+): D = readDataFromCache(
     cacheKey = CacheKey.rootKey(),
     customScalarAdapters = customScalarAdapters,
     cache = cache,
@@ -77,13 +78,16 @@ fun <D : Executable.Data> Executable<D>.readDataFromCache(
     cache: ReadOnlyNormalizedCache,
     cacheResolver: CacheResolver,
     cacheHeaders: CacheHeaders,
-) = readInternal(
-    cacheKey = cacheKey,
-    customScalarAdapters = customScalarAdapters,
-    cache = cache,
-    cacheResolver = cacheResolver,
-    cacheHeaders = cacheHeaders,
-)
+): D {
+  val variables = variables(customScalarAdapters, true)
+  return readInternal(
+      cacheKey = cacheKey,
+      cache = cache,
+      cacheResolver = cacheResolver,
+      cacheHeaders = cacheHeaders,
+      variables = variables
+  ).toData(adapter(), customScalarAdapters, variables)
+}
 
 fun <D : Executable.Data> Executable<D>.readDataFromCache(
     cacheKey: CacheKey,
@@ -91,40 +95,81 @@ fun <D : Executable.Data> Executable<D>.readDataFromCache(
     cache: ReadOnlyNormalizedCache,
     cacheResolver: ApolloResolver,
     cacheHeaders: CacheHeaders,
-) = readInternal(
+): D {
+  val variables = variables(customScalarAdapters, true)
+  return readInternal(
+      cacheKey = cacheKey,
+      cache = cache,
+      cacheResolver = cacheResolver,
+      cacheHeaders = cacheHeaders,
+      variables = variables
+  ).toData(adapter(), customScalarAdapters, variables)
+}
+
+@ApolloInternal
+fun <D : Executable.Data> Executable<D>.readDataFromCacheInternal(
+    cacheKey: CacheKey,
+    cache: ReadOnlyNormalizedCache,
+    cacheResolver: CacheResolver,
+    cacheHeaders: CacheHeaders,
+    variables: Executable.Variables,
+): CacheData = readInternal(
     cacheKey = cacheKey,
-    customScalarAdapters = customScalarAdapters,
     cache = cache,
     cacheResolver = cacheResolver,
     cacheHeaders = cacheHeaders,
+    variables = variables,
+)
+
+@ApolloInternal
+fun <D : Executable.Data> Executable<D>.readDataFromCacheInternal(
+    cacheKey: CacheKey,
+    cache: ReadOnlyNormalizedCache,
+    cacheResolver: ApolloResolver,
+    cacheHeaders: CacheHeaders,
+    variables: Executable.Variables,
+): CacheData = readInternal(
+    cacheKey = cacheKey,
+    cache = cache,
+    cacheResolver = cacheResolver,
+    cacheHeaders = cacheHeaders,
+    variables
 )
 
 
 private fun <D : Executable.Data> Executable<D>.readInternal(
     cacheKey: CacheKey,
-    customScalarAdapters: CustomScalarAdapters,
     cache: ReadOnlyNormalizedCache,
     cacheResolver: Any,
     cacheHeaders: CacheHeaders,
-): D {
-  val map = CacheBatchReader(
+    variables: Executable.Variables,
+): CacheData {
+  return CacheBatchReader(
       cache = cache,
       cacheHeaders = cacheHeaders,
       cacheResolver = cacheResolver,
-      variables = variables(customScalarAdapters, true),
+      variables = variables,
       rootKey = cacheKey.key,
       rootSelections = rootField().selections,
       rootTypename = rootField().type.rawType().name
-  ).toMap()
-
-  val reader = MapJsonReader(
-      root = map,
-  )
-  return adapter().fromJson(reader, customScalarAdapters)
+  ).collectData()
 }
 
 fun Collection<Record>?.dependentKeys(): Set<String> {
   return this?.flatMap {
     it.fieldKeys()
   }?.toSet() ?: emptySet()
+}
+
+@ApolloInternal
+fun <D : Executable.Data> CacheData.toData(
+    adapter: CompositeAdapter<D>,
+    customScalarAdapters: CustomScalarAdapters,
+    variables: Executable.Variables,
+): D {
+  val reader = MapJsonReader(
+      root = toMap(),
+  )
+
+  return adapter.fromJson(reader, CompositeAdapterContext.Builder().falseVariables(variables.valueMap.filter { it.value == false }.keys).customScalarAdapters(customScalarAdapters).build())
 }

@@ -13,11 +13,15 @@ class MockServerTest(val mockServer: MockServer, val apolloClient: ApolloClient,
  * A convenience function that makes sure the MockServer and ApolloClient are properly closed at the end of the test
  */
 @ApolloExperimental
-fun mockServerTest(block: suspend MockServerTest.() -> Unit) = com.apollographql.apollo3.testing.internal.runTest(true) {
+fun mockServerTest(
+    clientBuilder: ApolloClient.Builder.() -> Unit = {},
+    block: suspend MockServerTest.() -> Unit
+) = com.apollographql.apollo3.testing.internal.runTest(true) {
   val mockServer = MockServer()
 
   val apolloClient = ApolloClient.Builder()
       .serverUrl(mockServer.url())
+      .apply(clientBuilder)
       .build()
 
   try {
@@ -25,6 +29,6 @@ fun mockServerTest(block: suspend MockServerTest.() -> Unit) = com.apollographql
       MockServerTest(mockServer, it, this).block()
     }
   } finally {
-    mockServer.stop()
+    mockServer.close()
   }
 }

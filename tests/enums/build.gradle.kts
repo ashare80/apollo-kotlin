@@ -1,8 +1,12 @@
+import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+
 plugins {
   id("org.jetbrains.kotlin.jvm")
-  id("apollo.test")
   id("com.apollographql.apollo3")
 }
+
+apolloTest()
 
 dependencies {
   implementation(libs.apollo.runtime)
@@ -11,8 +15,14 @@ dependencies {
 }
 
 apollo {
-  service("kotlin") {
-    packageName.set("enums.kotlin")
+  service("kotlin15") {
+    packageName.set("enums.kotlin15")
+    sealedClassesForEnumsMatching.set(listOf(".*avity", "FooSealed"))
+    languageVersion.set("1.5")
+  }
+
+  service("kotlin19") {
+    packageName.set("enums.kotlin19")
     sealedClassesForEnumsMatching.set(listOf(".*avity", "FooSealed"))
   }
 
@@ -23,5 +33,20 @@ apollo {
     outputDirConnection {
       connectToJavaSourceSet("main")
     }
+  }
+}
+
+//kotlin {
+//  compilerOptions {
+//    languageVersion.set(KotlinVersion.KOTLIN_1_9)
+//    apiVersion.set(KotlinVersion.KOTLIN_1_9)
+//  }
+//}
+
+
+tasks.withType(KotlinCompile::class.java).configureEach {
+  kotlinOptions {
+    apiVersion = "1.9"
+    languageVersion = "1.9"
   }
 }

@@ -390,16 +390,9 @@ interface Service {
    *
    * Only valid when [generateKotlinModels] is `true`.
    *
-   * Must be either "1.4" or "1.5".
+   * For now only "1.5" is supported. Other versions might be added later as the Kotlin language evolves.
    *
-   * Note: "1.4", while still supported, is not useful since Apollo Kotlin requires Kotlin 1.5+. It is considered deprecated.
-   *
-   * Using an higher languageVersion allows generated code to use more language features like
-   * sealed interfaces in Kotlin 1.5 for an example.
-   *
-   * See also https://kotlinlang.org/docs/gradle.html#attributes-common-to-jvm-and-js
-   *
-   * Default: use the version of the Kotlin plugin.
+   * Default: "1.5"
    */
   val languageVersion: Property<String>
 
@@ -434,6 +427,22 @@ interface Service {
   val generateOptionalOperationVariables: Property<Boolean>
 
   /**
+   * Specifies which methods will be auto generated on operations, models, fragments and input objects.
+   *
+   * Pass a list of any of the following:
+   *
+   * - "equalsHashCode" generates `equals` and `hashCode` methods that will compare generated class properties
+   * - "toString" generates a method that will print a pretty string representing the data in the class
+   * - "copy" (Kotlin only) generates a method that will copy the class with named parameters for
+   * - "dataClass" (Kotlin only and redundant with all other methods) generates the class as a [data class](https://kotlinlang.org/docs/data-classes.html)
+   * which will automatically generate `toString`, `copy`, `equals` and `hashCode`.
+   *
+   * Default for kotlin: `listOf("data")`
+   * Default for Java: `listOf("equalsHashCode", "toString")`
+   */
+  val generateMethods: ListProperty<String>
+
+  /**
    * Whether to generate the type safe Data builders. These are mainly used for tests but can also be used for other use
    * cases too.
    */
@@ -461,27 +470,25 @@ interface Service {
   val codegenModels: Property<String>
 
   /**
-   * When to add __typename. One of "always", "ifFragments", "ifAbstract" or "ifPolymorphic"
+   * When to add __typename. One of "always", "ifAbstract", "ifPolymorphic" or "ifFragments"
    *
    * - "always": Add '__typename' for every composite field
    *
-   * - "ifFragments": Add '__typename' for every selection set that contains fragments (inline or named)
-   * This causes cache misses when introducing fragments where no fragment was present before and will be certainly removed in
-   * a future version.
-   *
    * - "ifAbstract": Add '__typename' for abstract fields, i.e. fields that are of union or interface type
-   * Note: It also adds '__typename' on fragment definitions that satisfy the same property because fragments
-   * could be read from the cache, and we don't have a containing field in that case.
    *
    * - "ifPolymorphic": Add '__typename' for polymorphic fields, i.e. fields that contains a subfragment
    * (inline or named) whose type condition isn't a super type of the field type.
    * If a field is monomorphic, no '__typename' will be added.
-   * This adds the bare minimum amount of __typename but the logic is substantially more complex and
-   * it could cause cache misses when using fragments on monomorphic fields because __typename can be
-   * required in some cases.
+   * This adds the bare minimum amount of __typename but the logic is substantially more complex than `ifAbstract`.
    *
-   * Note: It also adds '__typename' on fragment definitions that satisfy the same property because fragments
-   * could be read from the cache, and we don't have a containing field in that case.
+   * - "ifFragments" (deprecated): Add '__typename' for every selection set that contains fragments (inline or named)
+   * This causes cache misses when introducing fragments where no fragment was present before. This is deprecated and
+   * will be removed in a future version.
+   *
+   * Apollo Kotlin requires __typename to handle polymorphism and parsing fragments. By default, __typename is added on
+   * every composite field selection set. When using the cache, this also ensures that cache keys can read __typename.
+   * If you're not using the cache or do not use __typename in your cache keys, you can use "ifAbstract" or "ifPolymorphic"
+   * to reduce the number of __typename and the size of the network response.
    *
    * Default value: "ifFragments"
    */
@@ -648,6 +655,16 @@ interface Service {
    * Default: false
    */
   val generatePrimitiveTypes: Property<Boolean>
+
+  /**
+   * Whether to generate builders in addition to constructors for operations and input types.
+   * Constructors are more concise but require passing an instance of `Optional` always, making them more verbose
+   * for the cases where there are a lot of optional input parameters.
+   *
+   * Default: false
+   */
+  @ApolloExperimental
+  val generateInputBuilders: Property<Boolean>
 
   /**
    * The style to use for fields that are nullable in the Java generated code.

@@ -2,12 +2,12 @@ plugins {
   id("org.jetbrains.kotlin.jvm")
   id("java-gradle-plugin")
   id("com.gradle.plugin-publish")
-  id("apollo.library")
   id("com.gradleup.gr8")
 }
 
-apolloLibrary {
-}
+apolloLibrary(
+    javaModuleName = null
+)
 
 // Configuration for extra jar to pass to R8 to give it more context about what can be relocated
 configurations.create("gr8Classpath")
@@ -15,7 +15,7 @@ configurations.create("gr8Classpath")
 val shadeConfiguration = configurations.create("shade")
 
 // Set to false to skip relocation and save some building time during development
-val relocateJar = true
+val relocateJar = System.getenv("APOLLO_RELOCATE_JAR")?.toBoolean() ?: true
 
 dependencies {
   /**
@@ -117,7 +117,7 @@ tasks.register("cleanStaleTestProjects") {
   /**
    * Remove stale testProject directories
    */
-  val buildFiles = buildDir.listFiles()
+  val buildFiles = layout.buildDirectory.asFile.get().listFiles()
   doFirst {
     buildFiles?.forEach {
       if (it.isDirectory && it.name.startsWith("testProject")) {
@@ -166,6 +166,7 @@ fun createTests(javaVersion: Int) {
     testClassesDirs = sourceSet.output.classesDirs
     classpath = configurations[sourceSet.runtimeClasspathConfigurationName] + sourceSet.output
 
+    environment("APOLLO_RELOCATE_JAR", System.getenv("APOLLO_RELOCATE_JAR"))
     setTestToolchain(project, this, javaVersion)
   }
 

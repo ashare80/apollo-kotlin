@@ -1,11 +1,13 @@
 package com.apollographql.apollo3.compiler.codegen.kotlin.file
 
+import com.apollographql.apollo3.compiler.TargetLanguage
 import com.apollographql.apollo3.compiler.codegen.Identifier
 import com.apollographql.apollo3.compiler.codegen.Identifier.UNKNOWN__
 import com.apollographql.apollo3.compiler.codegen.kotlin.CgFile
 import com.apollographql.apollo3.compiler.codegen.kotlin.CgFileBuilder
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinContext
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinSymbols
+import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.deprecatedAnnotation
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDeprecation
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDescription
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddOptIn
@@ -23,6 +25,7 @@ import com.squareup.kotlinpoet.joinToCode
 internal class EnumAsEnumBuilder(
     private val context: KotlinContext,
     private val enum: IrEnum,
+    private val withUnknown: Boolean
 ) : CgFileBuilder {
   private val layout = context.layout
   private val packageName = layout.typePackageName()
@@ -61,7 +64,9 @@ internal class EnumAsEnumBuilder(
           values.forEach { value ->
             addEnumConstant(layout.enumAsEnumValueName(value.targetName), value.enumConstTypeSpec())
           }
-          addEnumConstant("UNKNOWN__", unknownValueTypeSpec())
+          if (withUnknown) {
+            addEnumConstant("UNKNOWN__", unknownValueTypeSpec())
+          }
         }
         .build()
   }
@@ -69,40 +74,66 @@ internal class EnumAsEnumBuilder(
   private fun IrEnum.companionTypeSpec(): TypeSpec {
     return TypeSpec.companionObjectBuilder()
         .addProperty(typePropertySpec())
+        .addProperty(knownEntriesPropertySpec())
+        .apply {
+          if (withUnknown) {
+            // !withUnknown is a new thing, no need to add deprecated symbols there
+            addFunction(knownValuesFunSpec())
+          }
+        }
         .addFunction(safeValueOfFunSpec())
-        .addFunction(knownValuesFunSpec())
         .build()
   }
 
   private fun IrEnum.knownValuesFunSpec(): FunSpec {
     return FunSpec.builder(Identifier.knownValues)
         .addKdoc("Returns all [%T] known at compile time", selfClassName)
+        .addAnnotation(deprecatedAnnotation("Use knownEntries instead").toBuilder().addMember("replaceWith·=·ReplaceWith(%S)", "this.knownEntries").build())
+        .returns(KotlinSymbols.Array.parameterizedBy(selfClassName))
+        .addCode("return %N.toTypedArray()", Identifier.knownEntries)
+        .build()
+  }
+
+  private fun IrEnum.knownEntriesPropertySpec(): PropertySpec {
+    return PropertySpec.builder(Identifier.knownEntries, KotlinSymbols.List.parameterizedBy(selfClassName))
+        .addKdoc("All [%T] known at compile time", selfClassName)
         .maybeSuppressDeprecation(enum.values)
         .maybeAddOptIn(context.resolver, enum.values)
-        .returns(KotlinSymbols.Array.parameterizedBy(selfClassName))
-        .addCode(
-            CodeBlock.builder()
-                .add("return·arrayOf(\n")
-                .indent()
-                .add(
-                    values.map {
-                      CodeBlock.of("%N", layout.enumAsEnumValueName(it.targetName))
-                    }.joinToCode(",\n")
+        .getter(
+            FunSpec.getterBuilder()
+                .addCode(CodeBlock.builder()
+                    .add("return·listOf(\n")
+                    .indent()
+                    .add(
+                        values.map {
+                          CodeBlock.of("%N", layout.enumAsEnumValueName(it.targetName))
+                        }.joinToCode(",\n")
+                    )
+                    .unindent()
+                    .add(")\n")
+                    .build()
                 )
-                .unindent()
-                .add(")\n")
                 .build()
         )
         .build()
   }
 
+
   private fun IrEnum.safeValueOfFunSpec(): FunSpec {
+    val entries = if (context.isTargetLanguageVersionAtLeast(TargetLanguage.KOTLIN_1_9)) "entries" else "values()"
     return FunSpec
         .builder("safeValueOf")
         .addParameter("rawValue", String::
         class)
         .returns(selfClassName)
-        .addStatement("return·values().find·{·it.rawValue·==·rawValue·} ?: $UNKNOWN__")
+        .addCode("return·$entries.find·{·it.rawValue·==·rawValue·} ?: ")
+        .apply {
+          if (withUnknown) {
+            addCode(UNKNOWN__)
+          } else {
+            addCode("error(\"No enum value found '${'$'}rawValue'\")")
+          }
+        }
         .build()
   }
 

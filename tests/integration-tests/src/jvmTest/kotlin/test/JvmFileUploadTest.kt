@@ -5,7 +5,8 @@ import com.apollographql.apollo3.api.Upload
 import com.apollographql.apollo3.api.toUpload
 import com.apollographql.apollo3.integration.upload.SingleUploadTwiceMutation
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.network.okHttpClient
 import com.apollographql.apollo3.testing.internal.runTest
 import okhttp3.OkHttpClient
@@ -31,7 +32,7 @@ class JvmFileUploadTest {
     mockServer = MockServer()
 
     // We only test the data that is sent to the server, we don't really mind the response
-    mockServer.enqueue("""
+    mockServer.enqueueString("""
       {
         "data": null
       }
@@ -41,7 +42,7 @@ class JvmFileUploadTest {
   }
 
   private suspend fun tearDown() {
-    mockServer.stop()
+    mockServer.close()
   }
 
   @Test
@@ -49,7 +50,7 @@ class JvmFileUploadTest {
   fun twice() = runTest(before = { setUp() }, after = { tearDown() }) {
     apolloClient.mutation(mutationTwice).execute()
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
     val parts = request.parts()
 
     val expectedBodyLength = 1009

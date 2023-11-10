@@ -1,6 +1,372 @@
 Change Log
 ==========
 
+# Version 4.0.0-beta.2
+
+_2023-10-23_
+
+We're continuing to progress towards the stable release of Apollo Kotlin v4 with this 2nd beta, which contains a few bug
+fixes and a new normalized cache viewer in the IDE plugin.
+
+This is a great time to try out the new version and report any issues you might find!
+
+## 🧩 IDE plugin: normalized cache viewer
+
+The IDE plugin now has a graphical tool to inspect a normalized cache database. It lets you browse the records and see
+their contents.
+This is useful to debug cache issues, or to understand how the normalized cache works.
+
+The tool is available from `View` | `Tool Windows` | `Apollo Normalized Cache`.
+
+More information about the plugin can be
+found [here](https://www.apollographql.com/docs/kotlin/v4/testing/android-studio-plugin).
+
+## 👷‍ All changes
+
+* Fragment variables: fix false warning about unused variables (#5290)
+* Fix reading fragment with include directives from the cache (#5296)
+* Fix partial data throwing with useV3ExceptionHandling and normalized cache (#5313)
+* Unbreak benchmarks (#5284)
+* Bump to gradle 8.4 and IJGP 1.16.0 (#5286)
+* Add apollo-execution and apollo-ksp (#5281)
+* [IJ plugin] Normalized cache viewer: UI (#5298)
+* Fix build (#5301)
+* Bump to Kotlin 1.9.20-RC (#5300)
+* [IJ plugin] Telemetry: networking (#5285)
+* [IJ plugin] Cache viewer: record quick filter (#5302)
+* Update release script to update versions in IJ plugin (#5303)
+* MockServer API cleanup (#5307)
+* Remove some warnings (#5308)
+* Use the default hierarchy template (#5309)
+* [IJ plugin] Cache viewer: open/read db file (#5306)
+* [IJ plugin] Cache viewer: add back/forward buttons, and copy action (#5310)
+* Fix NSURL tests on recent apple OSes (#5315)
+* [IJ plugin] Cache viewer: pull file from attached devices (#5314)
+* Make more of MockServer common code, only abstract the socket part (#5316)
+
+# Version 4.0.0-beta.1
+
+_2023-10-02_
+
+The first beta of the next major version of Apollo Kotlin is here!
+
+While there still may be a few API changes before the stable release, we are getting close and this is a great time to try out the new version and report any issues you might find!
+
+## 💙️ External contributors
+
+Many thanks to @baconz and @hbmartin for their awesome contributions to this release! 
+
+## ❗️ Schema Nullability Extensions (#5191)
+
+The GraphQL community [is working hard at making it easier to work with nullability in GraphQL](https://github.com/graphql/client-controlled-nullability-wg/). 
+
+In Apollo Kotlin, it is now possible to change the nullability of fields _and_ list elements at the schema level using schema extensions. This is useful if you believe the schema made a field nullable for error reasons only and you don't want to handle those errors. In these cases, the whole query will return as an error.
+
+Given the following SDL:
+```graphql
+# schema.graphqls
+type Query {
+  random: Int
+  list: [String]
+  required: Int!
+}
+```
+
+You can extend it like so:
+```graphql
+# extra.graphqls
+extend type Query {
+  # make random non-nullable
+  random: Int!
+  # make list and list items non-nullable
+  list: [String!]!
+  # make required nullable
+  required: Int
+  # add a new field
+  new: Float
+}
+```
+
+## 📜️ Code generation
+
+### `generateMethods` option to control which model methods are generated (#5212)
+
+By default all Kotlin models, operations, fragments, and input objects are generated as data classes. This means that the Kotlin compiler will
+auto-generate `toString`, `equals` `hashCode`, `copy` and `componentN`. If you don't think you need all of those
+methods, and/or you are worried about the size of the generated code, you can now choose which methods to generate with the `generateMethods` option:
+
+```kotlin
+apollo {
+  service("service") {
+    // Generates equals/hashCode
+    generateMethods.set(listOf("equalsHashCode"))
+    // Also generates toString, equals, and hashcode
+    generateMethods.set(listOf("equalsHashCode", "toString"))
+    // Only generates copy
+    generateMethods.set(listOf("copy"))
+    // Generates data classes (the default)
+    generateMethods.set(listOf("dataClass"))
+  }
+}
+```
+
+### Other codegen tweaks
+
+* `Enum.values()` is no longer recommended when using Kotlin 1.9+ and the generated code now uses `entries` instead (#5208)
+* Deprecation warnings in generated code are suppressed (#5242)
+
+## 🧩 IntelliJ plugin
+
+* You can now suppress reported unused fields, by adding a comment on the field, or by configuring a regex in the settings (#5195, #5197)
+* Opening an operation in Sandbox now includes all referenced fragments (#5236)
+
+## 🪲 Bug fixes 
+
+* Detect cyclic fragment references (#5229)
+* Fix `Optional<V>.getOrThrow()` when V is nullable (#5192)
+* `useV3ExceptionHandling` only throws when there are no errors populated (#5231)
+* Tweak the `urlEncode` algorithm (#5234)
+* Add a validation for adding `keyFields` on non-existent fields (#5215)
+* Fix logging when the response body is a single line (#5254)
+
+## 👷‍ All changes
+
+* [Infra] Count tests in CI (#5181)
+* Test: remove flake  (#5167)
+* Use compilations instead of multiple mpp targets for java codegen tests (#5164)
+* [IJ plugin] Add fragment usages when going to fragment declaration (#5189)
+* Add `mergeExtensions` and `toFullSchemaGQLDocument` (#5162)
+* Fix `Optional<V>.getOrThrow()` when V is nullable (#5192)
+* Schema Nullability Extensions (#5191)
+* [IJ plugin] Add inspection suppressor to allow suppression on fields (#5195)
+* Add PQL support to `registerOperations {}`  (#5196)
+* Add WebSocketMockServer and tests for WebSocketEngine  (#5187)
+* [IJ plugin] Add options to ignore fields when reporting unused fields (#5197)
+* Unbreak benchmarks (#5202)
+* Bump uuid and okio (#5204)
+* [IJ plugin] Update references to 4.0.0-alpha.2 to 4.0.0-alpha.3 (#5205)
+* Use entries instead of values() when using Kotlin 1.9 (#5208)
+* Add `generateMethods` options to control which methods are generated on "data" classes (#5212)
+* Add a validation for adding keyFields on non-existent fields (#5215)
+* Engine tests: use compilations to share logic between ktor/default engines (#5216)
+* Skip Dokka during development (#5219)
+* Introduce JsonReader.toApolloResponse (#5218)
+* Add tests for empty objects in last chunk (#5223)
+* useV3ExceptionHandling should only throw when there are no errors populated (#5231)
+* Tweak the urlencode algorithm (#5234)
+* [IJ plugin] Gather referenced fragments when opening in Apollo Sandbox (#5236)
+* Kotlin 1.9.20-Beta (#5232)
+* Suppress Kotlin warnings in generated code (#5242)
+* Add Optional.getOrElse(value) (#5243)
+* Add Error.Builder() (#5244)
+* Add APOLLO_RELOCATE_JAR and APOLLO_JVM_ONLY (#5245)
+* Detect cyclic fragment references (#5229)
+* [IJ plugin] Telemetry: collect properties (#5246)
+* Bump kotlin to 1.9.20-Beta2 (#5249)
+* [IJ plugin] Telemetry: settings and opt-out dialog (#5247)
+* [IJ plugin] Telemetry: add IDE/plugin related properties and events (#5250)
+* Fix cyclic fragment detection (#5252)
+* [IJ plugin] Add an ErrorReportSubmitter (#5253)
+* Logging a single line response body by @hbmartin in https://github.com/apollographql/apollo-kotlin/pull/5254
+* [IJ plugin] Schedule send telemetry (#5256)
+* Allow MapJsonReader to read non-Map instances (#5251)
+* [IJ plugin] Fix a crash when loading plugin (#5260)
+* Tweaks for K2 (#5259)
+* Update apollo published (#5263)
+
+# Version 4.0.0-alpha.3
+
+_2023-08-08_
+
+A lot of additions to the [IntelliJ plugin](https://www.apollographql.com/docs/kotlin/v4/testing/android-studio-plugin) as well as a new GraphQL parser, a new Ktor multiplatform engine and more!
+
+## 💙 External contributors 💙
+
+Apollo Kotlin wouldn't be where it is today without the awesome feedback, discussions and contributions from community members. Specifically in this release, we want to give a huge THANK YOU to: @Emplexx, @sonatard, @yt8492, @mayakoneval, @Meschreiber, @pcarrier and @ashare80
+
+## 🧩 IntelliJ plugin 
+
+### 👓 Unused field inspection (#5069)
+
+The IntelliJ plugin now detects unused fields in your queries and greys them out:
+
+https://github.com/apollographql/apollo-kotlin/assets/372852/6a573a78-4a07-4294-8fa5-92a9ebb02e6c
+
+## v4 migration
+
+The IntelliJ plugin can migrate most of your codebase to v4. To try it out, go to:
+
+`Tools` -> `Apollo` -> `Migrate to Apollo Kotlin 4`
+
+Because Kotlin is such a rich language and we can't account for all possible ways to configure your build, you might have to do some manual tweaks after the migration. But the plugin should handle most of the repetitive tasks of migrating.
+
+### ☁️ Schema download (#5143)
+
+If you configured introspection, you can now download your schema directly from IntelliJ
+
+<img src="https://github.com/apollographql/apollo-kotlin/assets/372852/3a15f587-b057-4df5-82c0-2e0b0247c203" width=250/>
+
+### 📖 documentation
+
+The IntelliJ plugin now has its [own dedicated documentation page](https://www.apollographql.com/docs/kotlin/v4/testing/android-studio-plugin). 
+
+Consult it to find out everything you can do with the plugin as well as installation instructions.
+
+
+## 🌳 Multiplatform Apollo AST (#5047)
+
+Apollo AST, the GraphQL parser powering Apollo Kotlin is now a manually written recursive descent parser, compared to an automatically generated [Antlr](https://www.antlr.org/) parser before. 
+[Benchmarks](https://github.com/apollographql/apollo-kotlin/pull/5047) show a x2 to x3 speed improvement and the parser also now supports all platforms Apollo Kotlin supports.
+
+## ❗❓ Initial Client Controlled Nullability (CCN) support (#5118)
+
+[Client Controlled Nullability (CCN)](https://github.com/graphql/graphql-wg/blob/main/rfcs/ClientControlledNullability.md) is a GraphQL specification RFC aiming at making it easier to work with GraphQL in type safe languages like Kotlin and Swift.
+
+To use CCN, use the `!` and `?` CCN modifiers in your queries:
+
+```graphql
+query GetUser {
+  user {
+    id
+    # name is required to display the user
+    name!
+    # phoneNumber is optional
+    phoneNumber?
+  }
+}
+```
+
+The RFC is still in early stages and requires server support. The API and final shape of the RFC might still change. By adding support in Apollo Kotlin, we're hoping to unblock potential users and gather real life feedbacks helping the proposal move forward.
+
+## 📡 Ktor engine (#5142)
+
+Apollo Kotlin now ships a `apollo-engine-ktor` that you can use to replace the default HTTP and WebSocket engines of ApolloClient. To use it, add `apollo-engine-ktor` to your dependencies:
+
+```kotlin
+dependencies {
+  implementation("com.apollographql.apollo3:apollo-engine-ktor")
+}
+```
+
+And configure your client to use it:
+
+```kotlin
+val apolloClient = ApolloClient.Builder()
+    .serverUrl("https://example.com/graphql")
+    .httpEngine(KtorHttpEngine())
+    .webSocketEngine(KtorWebSocketEngine())
+    .build()
+```
+
+## 👷 `generateInputBuilders` (#5146)
+
+For Kotlin codegen, Apollo Kotlin relied on constructors with [default arguments](https://kotlinlang.org/docs/functions.html#default-arguments). While this works well in most cases, default arguments lack the ability to distinguish between `null` and `absent` meaning you have to wrap your values in `Optional` before passing them to your constructor. If you had a lot of values, it could be cumbersome:
+
+```kotlin
+val input = SignupMemberInput(
+    dob = Utils.changeDateFormat(user.dobMMDDYYYY, "MM/dd/yyyy", "yyyy-MM-dd"),
+    firstName = Optional.Present(user.firstName),
+    lastName = user.lastName,
+    ssLast4 = Optional.Present(user.ssnLastFour),
+    email = user.email,
+    cellPhone = Optional.Present(user.phone),
+    password = user.password,
+    acceptedTos = true,
+    formIds = Optional.Present(formIds),
+    medium = Optional.Present(ConsentMediumEnum.android)
+)
+```
+
+To generate Kotlin Builders, set `generateInputBuilders` to true in your Gradle file:
+
+```kotlin
+apollo {
+  service("api") {
+    packageName.set("com.example")
+
+    generateInputBuilders.set(true)
+  }
+}
+```
+
+With Builders, the same above code can be written in a more fluent way:
+
+```kotlin
+val input = SignupMemberInput.builder().apply {
+    dob(Utils.changeDateFormat(user.dobMMDDYYYY, "MM/dd/yyyy", "yyyy-MM-dd"))
+    firstName(user.firstName)
+    lastName(user.lastName)
+    ssLast4(user.ssnLastFour)
+    email(user.email)
+    cellPhone(user.phone)
+    password(user.password)
+    acceptedTos(true)
+    formIds(formIds)
+    medium(ConsentMediumEnum.ANDROID)
+}.build()
+```
+
+
+## 👷‍ All changes
+
+* [IJ plugin] Update platformVersion to 223 (#5166)
+* [runtime] Add Ktor Engine (#5142)
+* [tests] Add a test for field names that have the same name as an enum type (#5158)
+* [api] Remove limitation on the JSON nesting. If the JSON is way too nested, an OutOfMemory exception will happen (#5161)
+* [ast] add HasDirectives to all things with directives (#5140)
+* [compiler] add a test for types named `Object` (#5156)
+* [ast] Add a special comment to disable the GraphQL intelliJ plugin inspection (#5154)
+* [IJ plugin] Inspection to suggest adding an introspection block (#5152)
+* [compiler] Better KDoc escape (#5155)
+* [ast] Allow explicit CCN syntax (#5148)
+* [compiler] Add generateInputBuilders (#5146)
+* [infra] Update KotlinPoet (#5147)
+* [infra] update Gradle to 8.3-rc-3 (#5149)
+* [IJ plugin] Add a Download Schema action (#5143)
+* [runtime] Remove ChannelWrapper (#5145)
+* [IJ Plugin] Suggest Apollo 4 migration from version catalog and build.gradle.kts dependencies (#5141)
+* [IJ plugin] v3->v4 migration: add `useV3ExceptionHandling(true)` to `ApolloClient.Builder()`. (#5135)
+* [IJ plugin] Improve compat->operationBased migration (#5134)
+* [IJ plugin] Avoid a crash caught in inspection (#5139)
+* [ast] add GQLNamed and GQLDescribed on all types that have a name or a description (#5127)
+* [ast] Omit scalar definitions from SDL (#5132)
+* [infra] Use SQLDelight 2.0.0 (#5133)
+* [IJ Plugin] Don't report redefinitions of built-in types as errors (#5131)
+* [IJ plugin] v3 -> v4 migration: enum capitalization (#5128)
+* [ast] Initial CCN support (#5118)
+* [infra] Make generateSourcesDuringGradleSync opt-in now that we have the IJ plugin (#5117)
+* [compose] Catch ApolloException in toState and watchAsState (#5116)
+* [IJ plugin] v3 -> v4 migration: Gradle conf (#5114)
+* [compiler] validate query/mutation/subscription directives (#5113)
+* [cache] Move serialization outside of cache lock (#5101)
+* [infra] Use compose 1.5.0 stable (#5108)
+* [compiler] Fix "no schema found" error message (#5106)
+* [IJ plugin] v3 -> v4 migration: deprecations/renames, part 2 (#5109)
+* [infra] More Apollo AST APIs (#5104)
+* [infra] Apollo AST: add start/end instead of endColumn/endLine (#5103)
+* [IJ plugin] v3 -> v4 migration: deprecations/renames (#5099)
+* [ast] fix column computation of block strings (#5102)
+* [benchmarks] Add macrobenchmarks (#5100)
+* [IJ plugin] Migrate to Apollo Kotlin 4: dependencies (#5097)
+* [IJ plugin] Support IJ platform 232 (#5095)
+* [infra] bump ijgp (#5091)
+* [infra] remove a bunch of build workarounds (#5090)
+* [4.0 cleanups] Remove DefaultImpls everywhere (#5088)
+* [infra] Remove golatac (#5086)
+* [infra] Use SQLDelight 2.0.0-rc02 and AGP 8.0.0 (#5085)
+* [ast] Switch back the parser to Strings and add more tests (#5078)
+* [benchmarks] add graphql-java benchmark (#5077)
+* [infra] Use Kotlin 1.9.0 (#4997)
+* [ast] Turn into a mpp module and move jmh benchmark to an integration test (#5072)
+* [IJ/AS Plugin] Add unused operation and unused field inspections (#5069)
+* [ast] add endLine/endColumn (#5064)
+* [ast] Add more tests and rewrite the lexer to use bytes instead of strings (#5063)
+* [IJ plugin] Add a test for ApolloFieldInsightsInspection (#5062)
+* [IJ plugin] Add an "enclose in @defer fragment" quick fix for slow field inspection (#5061)
+* [IJ plugin] Add "Schema in .graphql file" inspection (#5059)
+* [ast] Add multiplatform apollo-ast (#5047)
+* [IJ plugin] Distinguish Apollo v3 and v4 (#5056)
+
 # Version 4.0.0-alpha.2
 
 _2023-06-30_

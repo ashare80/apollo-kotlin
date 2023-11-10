@@ -1,7 +1,11 @@
 package com.apollographql.apollo3.compiler
 
 import com.apollographql.apollo3.annotations.ApolloExperimental
+import com.apollographql.apollo3.ast.DeprecatedUsage
+import com.apollographql.apollo3.ast.DifferentShape
+import com.apollographql.apollo3.ast.DirectiveRedefinition
 import com.apollographql.apollo3.ast.GQLDefinition
+import com.apollographql.apollo3.ast.GQLDirectiveDefinition
 import com.apollographql.apollo3.ast.GQLDocument
 import com.apollographql.apollo3.ast.GQLFragmentDefinition
 import com.apollographql.apollo3.ast.GQLOperationDefinition
@@ -12,12 +16,14 @@ import com.apollographql.apollo3.ast.Issue
 import com.apollographql.apollo3.ast.ParserOptions
 import com.apollographql.apollo3.ast.QueryDocumentMinifier
 import com.apollographql.apollo3.ast.Schema
-import com.apollographql.apollo3.ast.checkKeyFields
-import com.apollographql.apollo3.ast.checkNoErrors
-import com.apollographql.apollo3.ast.introspection.toSchemaGQLDocument
+import com.apollographql.apollo3.ast.UnknownDirective
+import com.apollographql.apollo3.ast.UnusedFragment
+import com.apollographql.apollo3.ast.UnusedVariable
+import com.apollographql.apollo3.ast.apolloDefinitions
+import com.apollographql.apollo3.ast.checkEmpty
 import com.apollographql.apollo3.ast.parseAsGQLDocument
 import com.apollographql.apollo3.ast.pretty
-import com.apollographql.apollo3.ast.transformation.addRequiredFields
+import com.apollographql.apollo3.ast.toGQLDocument
 import com.apollographql.apollo3.ast.validateAsExecutable
 import com.apollographql.apollo3.ast.validateAsSchemaAndAddApolloDefinition
 import com.apollographql.apollo3.compiler.codegen.java.JavaCodeGen
@@ -29,14 +35,14 @@ import com.apollographql.apollo3.compiler.ir.IrOperations
 import com.apollographql.apollo3.compiler.ir.IrOperationsBuilder
 import com.apollographql.apollo3.compiler.ir.IrSchema
 import com.apollographql.apollo3.compiler.ir.IrSchemaBuilder
+import com.apollographql.apollo3.compiler.ir.IrTargetObject
 import com.apollographql.apollo3.compiler.ir.toIrOperations
 import com.apollographql.apollo3.compiler.operationoutput.OperationDescriptor
 import com.apollographql.apollo3.compiler.operationoutput.OperationOutput
 import com.apollographql.apollo3.compiler.operationoutput.writeTo
 import com.apollographql.apollo3.compiler.pqm.toPersistedQueryManifest
 import com.apollographql.apollo3.compiler.pqm.writeTo
-import okio.buffer
-import okio.source
+import com.squareup.kotlinpoet.FileSpec
 import java.io.File
 
 @ApolloExperimental
@@ -57,13 +63,25 @@ object ApolloCompiler {
   ): CodegenSchema {
 
     val schemaDocuments = schemaFiles.map {
-      it.toSchemaGQLDocument()
+      it.toGQLDocument(allowJson = true)
+    }
+
+    if (schemaDocuments.isEmpty()) {
+      error("No schema found. Apollo needs a `.graphqls` or a `.json` schema.")
     }
 
     // Locate the mainSchemaDocument. It's the one that contains the operation roots
-    val mainSchemaDocuments = schemaDocuments.filter {
-      it.definitions.filterIsInstance<GQLSchemaDefinition>().isNotEmpty()
+    val mainSchemaDocuments = mutableListOf<GQLDocument>()
+    var otherSchemaDocuments = mutableListOf<GQLDocument>()
+    schemaDocuments.forEach {
+      if (
+          it.definitions.filterIsInstance<GQLSchemaDefinition>().isNotEmpty()
           || it.definitions.filterIsInstance<GQLTypeDefinition>().any { it.name == "Query" }
+      ) {
+        mainSchemaDocuments.add(it)
+      } else {
+        otherSchemaDocuments.add(it)
+      }
     }
 
     if (mainSchemaDocuments.size > 1) {
@@ -75,10 +93,12 @@ object ApolloCompiler {
     }
     val mainSchemaDocument = mainSchemaDocuments.single()
 
-    val schemaDefinitions = schemaDocuments.flatMap { it.definitions }
+    // Sort the other schema document as type extensions are order sensitive
+    val otherSchemaDocumentSorted = otherSchemaDocuments.sortedBy { it.sourceLocation?.filePath?.substringAfterLast(File.pathSeparator) }
+    val schemaDefinitions = (listOf(mainSchemaDocument) + otherSchemaDocumentSorted).flatMap { it.definitions }
     val schemaDocument = GQLDocument(
         definitions = schemaDefinitions,
-        filePath = null
+        sourceLocation = null
     )
 
     /**
@@ -86,12 +106,15 @@ object ApolloCompiler {
      */
     val result = schemaDocument.validateAsSchemaAndAddApolloDefinition()
 
-    result.issues.filter { it.severity == Issue.Severity.WARNING }.forEach {
+    val issueGroup = result.issues.group(true, true)
+
+    issueGroup.errors.checkEmpty()
+    issueGroup.warnings.forEach {
       // Using this format, IntelliJ will parse the warning and display it in the 'run' panel
       logger.warning("w: ${it.sourceLocation.pretty()}: Apollo: ${it.message}")
     }
 
-    val schema = result.getOrThrow()
+    val schema = result.value!!
 
     checkScalars(schema, scalarMapping)
     return CodegenSchema(
@@ -104,14 +127,15 @@ object ApolloCompiler {
     )
   }
 
+
   /**
    * Parses the given files. Throws if there are parsing errors
    */
-  private fun Collection<File>.definitions(useAntlr: Boolean): List<GQLDefinition> {
+  private fun Collection<File>.definitions(): List<GQLDefinition> {
     val definitions = mutableListOf<GQLDefinition>()
     val parseIssues = mutableListOf<Issue>()
     map { file ->
-      val parseResult = file.source().buffer().parseAsGQLDocument(filePath = file.path, options = ParserOptions(useAntlr = useAntlr))
+      val parseResult = file.parseAsGQLDocument(options = ParserOptions.Builder().build())
       if (parseResult.issues.isNotEmpty()) {
         parseIssues.addAll(parseResult.issues)
       } else {
@@ -120,8 +144,9 @@ object ApolloCompiler {
         definitions.addAll(parseResult.value!!.definitions)
       }
     }
+
     // Parsing issues are fatal
-    parseIssues.checkNoErrors()
+    parseIssues.checkEmpty()
 
     return definitions
   }
@@ -135,7 +160,7 @@ object ApolloCompiler {
     /**
      * Step 1: parse the documents
      */
-    val definitions = executableFiles.definitions(options.useAntlr)
+    val definitions = executableFiles.definitions()
 
     val incomingFragments = options.incomingFragments
 
@@ -144,34 +169,38 @@ object ApolloCompiler {
      */
     val validationResult = GQLDocument(
         definitions = definitions + incomingFragments,
-        filePath = null
-    ).validateAsExecutable(schema, options.fieldsOnDisjointTypesMustMerge)
+        sourceLocation = null
+    ).validateAsExecutable(schema)
 
-    validationResult.issues.checkNoErrors()
+    val allIssues = mutableListOf<Issue>()
+    allIssues.addAll(validationResult.issues)
 
     val codegenModels = options.codegenSchema.codegenModels
     if (codegenModels == MODELS_RESPONSE_BASED || codegenModels == MODELS_OPERATION_BASED_WITH_INTERFACES) {
-      checkConditionalFragments(definitions).checkNoErrors()
+      allIssues.addAll(checkConditionalFragments(definitions))
     }
 
-    checkApolloReservedEnumValueNames(schema).checkNoErrors()
-    checkApolloTargetNameClashes(schema).checkNoErrors()
-    checkApolloInlineFragmentsHaveTypeCondition(definitions).checkNoErrors()
+    allIssues.addAll(checkApolloReservedEnumValueNames(schema))
+    allIssues.addAll(checkApolloTargetNameClashes(schema))
+    allIssues.addAll(checkApolloInlineFragmentsHaveTypeCondition(definitions))
 
     if (!options.decapitalizeFields) {
       // When flattenModels is true, we still must check capitalized fields inside fragment spreads
-      checkCapitalizedFields(definitions, checkFragmentsOnly = options.flattenModels).checkNoErrors()
+      allIssues.addAll(checkCapitalizedFields(definitions, checkFragmentsOnly = options.flattenModels))
     }
 
-    val warnings = validationResult.issues.filter {
-      it.severity == Issue.Severity.WARNING && (it !is Issue.DeprecatedUsage || options.warnOnDeprecatedUsages)
-    }
+    val issueGroup = allIssues.group(
+        options.warnOnDeprecatedUsages,
+        options.fieldsOnDisjointTypesMustMerge,
+    )
 
-    warnings.forEach {
+    issueGroup.errors.checkEmpty()
+
+    issueGroup.warnings.forEach {
       // Using this format, IntelliJ will parse the warning and display it in the 'run' panel
       options.logger.warning("w: ${it.sourceLocation.pretty()}: Apollo: ${it.message}")
     }
-    if (options.failOnWarnings && warnings.isNotEmpty()) {
+    if (options.failOnWarnings && issueGroup.warnings.isNotEmpty()) {
       throw IllegalStateException("Apollo: Warnings found and 'failOnWarnings' is true, aborting.")
     }
 
@@ -211,11 +240,11 @@ object ApolloCompiler {
         allFragmentDefinitions = allFragmentDefinitions,
         codegenModels = codegenModels,
         generateOptionalOperationVariables = options.generateOptionalOperationVariables,
-        fieldsOnDisjointTypesMustMerge = options.fieldsOnDisjointTypesMustMerge,
         flattenModels = options.flattenModels,
         decapitalizeFields = options.decapitalizeFields,
         alwaysGenerateTypesMatching = options.alwaysGenerateTypesMatching,
-        generateDataBuilders = options.codegenSchema.generateDataBuilders
+        generateDataBuilders = options.codegenSchema.generateDataBuilders,
+        fragmentVariableUsages = validationResult.fragmentVariableUsages
     ).build()
   }
 
@@ -340,6 +369,22 @@ object ApolloCompiler {
     )
   }
 
+  fun schemaFileSpecs(
+      codegenSchema: CodegenSchema,
+      packageName: String,
+  ): Pair<CodegenMetadata, List<FileSpec>> {
+    return KotlinCodeGen.schemaFileSpecs(codegenSchema, packageName)
+  }
+
+  fun resolverFileSpecs(
+      codegenSchema: CodegenSchema,
+      codegenMetadata: CodegenMetadata,
+      irTargetObjects: List<IrTargetObject>,
+      packageName: String,
+      serviceName: String,
+  ): List<FileSpec> {
+    return KotlinCodeGen.resolverFileSpecs(codegenSchema, codegenMetadata, irTargetObjects, packageName = packageName, serviceName = serviceName)
+  }
 
   fun writeKotlin(
       commonCodegenOptions: CommonCodegenOptions,
@@ -348,7 +393,7 @@ object ApolloCompiler {
     codegenSetup(commonCodegenOptions)
 
     return CodegenMetadata(
-        KotlinCodeGen.write(
+        KotlinCodeGen.writeOperations(
             commonCodegenOptions = commonCodegenOptions,
             kotlinCodegenOptions = kotlinCodegenOptions,
         )
@@ -374,6 +419,7 @@ object ApolloCompiler {
       operationOutputGenerator: OperationOutputGenerator = defaultOperationOutputGenerator,
       useSemanticNaming: Boolean = defaultUseSemanticNaming,
       generateFragmentImplementations: Boolean = defaultGenerateFragmentImplementations,
+      generateMethods: List<GeneratedMethod> = defaultGenerateMethodsKotlin,
       generateQueryDocument: Boolean = defaultGenerateQueryDocument,
       generateSchema: Boolean = defaultGenerateSchema,
       generatedSchemaName: String = defaultGeneratedSchemaName,
@@ -394,6 +440,7 @@ object ApolloCompiler {
       addJvmOverloads: Boolean = defaultAddJvmOverloads,
       requiresOptInAnnotation: String = defaultRequiresOptInAnnotation,
       compilerKotlinHooks: ApolloCompilerKotlinHooks = defaultCompilerKotlinHooks,
+      generateInputBuilders: Boolean = false
   ): CodegenMetadata {
     /**
      * Inject all built-in scalars
@@ -426,7 +473,6 @@ object ApolloCompiler {
         fieldsOnDisjointTypesMustMerge = fieldsOnDisjointTypesMustMerge,
         generateOptionalOperationVariables = generateOptionalOperationVariables,
         alwaysGenerateTypesMatching = alwaysGenerateTypesMatching,
-        useAntlr = true
     )
 
     val irOperations = buildIrOperations(irOptions)
@@ -453,6 +499,7 @@ object ApolloCompiler {
         useSemanticNaming = useSemanticNaming,
         packageNameGenerator = packageNameGenerator,
         generateFragmentImplementations = generateFragmentImplementations,
+        generateMethods = generateMethods,
         generateQueryDocument = generateQueryDocument,
         generateSchema = generateSchema,
         generatedSchemaName = generatedSchemaName,
@@ -484,7 +531,8 @@ object ApolloCompiler {
             addJvmOverloads = addJvmOverloads,
             requiresOptInAnnotation = requiresOptInAnnotation,
             compilerKotlinHooks = compilerKotlinHooks,
-            languageVersion = targetLanguage
+            languageVersion = targetLanguage,
+            generateInputBuilders = generateInputBuilders
         )
         writeKotlin(
             commonCodegenOptions = commonCodegenOptions,
@@ -493,4 +541,48 @@ object ApolloCompiler {
       }
     }
   }
+}
+
+private enum class Severity {
+  None,
+  Warning,
+  Error
+}
+
+internal class IssueGroup(
+    val ignored: List<Issue>,
+    val warnings: List<Issue>,
+    val errors: List<Issue>
+)
+
+internal fun List<Issue>.group(warnOnDeprecatedUsages: Boolean,
+                              fieldsOnDisjointTypesMustMerge: Boolean,
+): IssueGroup {
+  val ignored= mutableListOf<Issue>()
+  val warnings= mutableListOf<Issue>()
+  val errors= mutableListOf<Issue>()
+  val apolloDirectives = apolloDefinitions("v0.1").mapNotNull { (it as? GQLDirectiveDefinition)?.name }.toSet()
+
+  forEach {
+    val severity = when (it) {
+      is DeprecatedUsage -> if (warnOnDeprecatedUsages) Severity.Warning else Severity.None
+      is DifferentShape -> if (fieldsOnDisjointTypesMustMerge) Severity.Error else Severity.Warning
+      is UnusedVariable -> Severity.Warning
+      is UnusedFragment -> Severity.None
+      is UnknownDirective -> Severity.Warning
+      /**
+       * Because some users might have added the apollo directive to their schema, we just let that through for now
+       */
+      is DirectiveRedefinition -> if (it.name in apolloDirectives) Severity.None else Severity.Warning
+      else -> Severity.Error
+    }
+
+    when(severity) {
+      Severity.None -> ignored.add(it)
+      Severity.Warning -> warnings.add(it)
+      Severity.Error -> errors.add(it)
+    }
+  }
+
+  return IssueGroup(ignored, warnings, errors)
 }

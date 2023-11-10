@@ -4,6 +4,7 @@ import com.apollographql.apollo3.api.CompiledField
 import com.apollographql.apollo3.api.CompiledFragment
 import com.apollographql.apollo3.api.CompiledSelection
 import com.apollographql.apollo3.api.Executable
+import com.apollographql.apollo3.cache.normalized.api.CacheData
 import com.apollographql.apollo3.cache.normalized.api.CacheHeaders
 import com.apollographql.apollo3.cache.normalized.api.CacheKey
 import com.apollographql.apollo3.cache.normalized.api.CacheResolver
@@ -45,7 +46,7 @@ internal class CacheBatchReader(
 
   private val pendingReferences = mutableListOf<PendingReference>()
 
-  private class CollectState {
+  private class CollectState(val variables: Executable.Variables) {
     val fields = mutableListOf<CompiledField>()
   }
 
@@ -59,7 +60,7 @@ internal class CacheBatchReader(
           state.fields.add(compiledSelection)
         }
         is CompiledFragment -> {
-          if (typename in compiledSelection.possibleTypes || compiledSelection.typeCondition == parentType) {
+          if ((typename in compiledSelection.possibleTypes || compiledSelection.typeCondition == parentType) && !compiledSelection.shouldSkip(state.variables.valueMap)) {
             collect(compiledSelection.selections, parentType, typename, state)
           }
         }
@@ -70,16 +71,17 @@ internal class CacheBatchReader(
   private fun collectAndMergeSameDirectives(
       selections: List<CompiledSelection>,
       parentType: String,
+      variables: Executable.Variables,
       typename: String?,
   ): List<CompiledField> {
-    val state = CollectState()
+    val state = CollectState(variables)
     collect(selections, parentType, typename, state)
     return state.fields.groupBy { (it.responseName) to it.condition }.values.map {
       it.first().newBuilder().selections(it.flatMap { it.selections }).build()
     }
   }
 
-  fun toMap(): Map<String, Any?> {
+  fun collectData(): CacheData {
     pendingReferences.add(
         PendingReference(
             key = rootKey,
@@ -105,7 +107,7 @@ internal class CacheBatchReader(
           }
         }
 
-        val collectedFields = collectAndMergeSameDirectives(pendingReference.selections, pendingReference.parentType, record["__typename"] as? String)
+        val collectedFields = collectAndMergeSameDirectives(pendingReference.selections, pendingReference.parentType, variables, record["__typename"] as? String)
 
         val map = collectedFields.mapNotNull {
           if (it.shouldSkip(variables.valueMap)) {
@@ -123,8 +125,7 @@ internal class CacheBatchReader(
       }
     }
 
-    @Suppress("UNCHECKED_CAST")
-    return data[emptyList()].replaceCacheKeys(emptyList()) as Map<String, Any?>
+    return CacheBatchReaderData(data)
   }
 
   /**
@@ -150,27 +151,35 @@ internal class CacheBatchReader(
     }
   }
 
-  private fun Any?.replaceCacheKeys(path: List<Any>): Any? {
-    return when (this) {
-      is CacheKey -> {
-        data[path].replaceCacheKeys(path)
-      }
-      is List<*> -> {
-        mapIndexed { index, src ->
-          src.replaceCacheKeys(path + index)
+  private data class CacheBatchReaderData(
+      private val data: Map<List<Any>, Map<String, Any?>>,
+  ): CacheData {
+    @Suppress("UNCHECKED_CAST")
+    override fun toMap(): Map<String, Any?> {
+      return data[emptyList()].replaceCacheKeys(emptyList()) as Map<String, Any?>
+    }
+
+    private fun Any?.replaceCacheKeys(path: List<Any>): Any? {
+      return when (this) {
+        is CacheKey -> {
+          data[path].replaceCacheKeys(path)
         }
-      }
-      is Map<*, *> -> {
-        // This will traverse Map custom scalars but this is ok as it shouldn't contain any CacheKey
-        mapValues {
-          it.value.replaceCacheKeys(path + (it.key as String))
+        is List<*> -> {
+          mapIndexed { index, src ->
+            src.replaceCacheKeys(path + index)
+          }
         }
-      }
-      else -> {
-        // Scalar value
-        this
+        is Map<*, *> -> {
+          // This will traverse Map custom scalars but this is ok as it shouldn't contain any CacheKey
+          mapValues {
+            it.value.replaceCacheKeys(path + (it.key as String))
+          }
+        }
+        else -> {
+          // Scalar value
+          this
+        }
       }
     }
   }
 }
-

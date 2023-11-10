@@ -1,14 +1,11 @@
 plugins {
   id("org.jetbrains.kotlin.multiplatform")
-  id("apollo.library")
 }
 
-apolloLibrary {
-  javaModuleName("com.apollographql.apollo3.mockserver")
-  mpp {
-    withLinux.set(false)
-  }
-}
+apolloLibrary (
+  javaModuleName = "com.apollographql.apollo3.mockserver",
+  withLinux = false
+)
 
 kotlin {
   sourceSets {
@@ -25,7 +22,7 @@ kotlin {
 
     findByName("jsMain")?.apply {
       dependencies {
-        implementation(libs.kotlinx.nodejs)
+        implementation(libs.kotlin.node)
       }
     }
 
@@ -37,13 +34,21 @@ kotlin {
           // w: duplicate library name: com.apollographql.apollo3:apollo-mockserver
           // See https://youtrack.jetbrains.com/issue/KT-51110
           // We should probably remove this circular dependency but for the time being, just use excludes
-          exclude(group =  "com.apollographql.apollo3", module = "apollo-mockserver")
+          exclude(group = "com.apollographql.apollo3", module = "apollo-mockserver")
         }
         implementation(project(":apollo-runtime")) {
           because("We need HttpEngine for SocketTest")
         }
       }
     }
+
+    findByName("concurrentMain")?.apply {
+      dependencies {
+        implementation(libs.ktor.server.core)
+        implementation(libs.ktor.server.cio)
+        implementation(libs.ktor.server.websockets)
+        implementation(libs.ktor.network)
+      }
+    }
   }
 }
-

@@ -4,11 +4,12 @@ import com.apollographql.apollo3.annotations.ApolloExperimental
 import com.apollographql.apollo3.ast.GQLFragmentSpread
 import com.apollographql.apollo3.ast.GQLInlineFragment
 import com.apollographql.apollo3.ast.GQLNode
-import com.apollographql.apollo3.ast.introspection.toSchemaGQLDocument
 import com.apollographql.apollo3.ast.parseAsGQLDocument
+import com.apollographql.apollo3.ast.toGQLDocument
 import com.apollographql.apollo3.ast.validateAsSchemaAndAddApolloDefinition
 import com.apollographql.apollo3.compiler.TargetLanguage.JAVA
 import com.apollographql.apollo3.compiler.TargetLanguage.KOTLIN_1_5
+import com.apollographql.apollo3.compiler.TargetLanguage.KOTLIN_1_9
 import com.apollographql.apollo3.compiler.TestUtils.checkTestFixture
 import com.apollographql.apollo3.compiler.TestUtils.shouldUpdateMeasurements
 import com.apollographql.apollo3.compiler.TestUtils.shouldUpdateTestFixtures
@@ -16,8 +17,6 @@ import com.apollographql.apollo3.compiler.hooks.ApolloCompilerKotlinHooks
 import com.apollographql.apollo3.compiler.hooks.internal.AddInternalCompilerHooks
 import com.google.testing.junit.testparameterinjector.TestParameter
 import com.google.testing.junit.testparameterinjector.TestParameterInjector
-import okio.buffer
-import okio.source
 import org.junit.AfterClass
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,18 +113,7 @@ class CodegenTest {
      */
     val compileDuration = measureTime {
       if (parameters.generateKotlinModels) {
-        /**
-         * Some tests generate warnings because they are using deprecated fields
-         *
-         * We want to keep this for the user to easily locate them but can't tell the compiler to ignore
-         * them specifically. See also https://youtrack.jetbrains.com/issue/KT-24746
-         */
-        val expectedWarnings = folder.name in listOf(
-            "deprecated_merged_field",
-            "deprecation",
-        )
-
-        KotlinCompiler.assertCompiles(actualFiles.toSet(), !expectedWarnings)
+        KotlinCompiler.assertCompiles(actualFiles.toSet())
       } else {
         JavaCompiler.assertCompiles(actualFiles.toSet())
       }
@@ -151,7 +139,6 @@ class CodegenTest {
   }
 
   class ParametersProvider : TestParameter.TestParameterValuesProvider {
-    @OptIn(ExperimentalStdlibApi::class)
     override fun provideValues(): List<Parameters> {
       return File("src/test/graphql/com/example/")
           .listFiles()!!
@@ -162,7 +149,7 @@ class CodegenTest {
             check(queryFile != null) {
               "Cannot find query file in ${file.absolutePath}"
             }
-            val hasFragments = queryFile.source().buffer().parseAsGQLDocument().getOrThrow().hasFragments()
+            val hasFragments = queryFile.parseAsGQLDocument().getOrThrow().hasFragments()
 
             when {
               file.name == "companion" -> listOf(Parameters(file, MODELS_OPERATION_BASED, true))
@@ -306,13 +293,19 @@ class CodegenTest {
 
       val generateSchema = folder.name == "__schema"
 
+      val generateInputBuilders = folder.name == "input_object_type"
+
       val schemaFile = folder.listFiles()!!.find { it.isFile && (it.name == "schema.sdl" || it.name == "schema.json" || it.name == "schema.graphqls") }
           ?: File("src/test/graphql/schema.sdl")
 
       val graphqlFiles = setOf(File(folder, "TestOperation.graphql"))
       val operationOutputGenerator = OperationOutputGenerator.Default(operationIdGenerator)
 
-      val targetLanguage = if (generateKotlinModels) KOTLIN_1_5 else JAVA
+      val targetLanguage = if (generateKotlinModels) {
+        if (folder.name == "enum_field") KOTLIN_1_9 else KOTLIN_1_5
+      } else {
+        JAVA
+      }
       val targetLanguagePath = if (generateKotlinModels) "kotlin" else "java"
       val flattenModels = when {
         folder.name in listOf("capitalized_fields", "companion") -> true
@@ -382,9 +375,19 @@ class CodegenTest {
 
       val compilerKotlinHooks = if (generateAsInternal) AddInternalCompilerHooks(setOf(".*")) else ApolloCompilerKotlinHooks.Identity
       val packageNameGenerator = PackageNameGenerator.Flat(packageName)
+      val generateMethods = when (targetLanguage) {
+        JAVA -> defaultGenerateMethodsJava
+        else -> {
+          if (folder.name == "input_object_variable_and_argument_with_generated_methods") {
+            listOf(GeneratedMethod.COPY, GeneratedMethod.TO_STRING, GeneratedMethod.EQUALS_HASH_CODE)
+          } else {
+            defaultGenerateMethodsKotlin
+          }
+        }
+      }
 
       ApolloCompiler.writeSimple(
-          schema = schemaFile.toSchemaGQLDocument().validateAsSchemaAndAddApolloDefinition().getOrThrow(),
+          schema = schemaFile.toGQLDocument(allowJson = true).validateAsSchemaAndAddApolloDefinition().getOrThrow(),
           executableFiles = graphqlFiles,
           outputDir = outputDir,
           flattenModels = flattenModels,
@@ -407,7 +410,9 @@ class CodegenTest {
           requiresOptInAnnotation = requiresOptInAnnotation,
           compilerKotlinHooks = compilerKotlinHooks,
           generatePrimitiveTypes = generatePrimitiveTypes,
-          generateFilterNotNull = true
+          generateFilterNotNull = true,
+          generateInputBuilders = generateInputBuilders,
+          generateMethods = generateMethods
       )
       return outputDir
     }

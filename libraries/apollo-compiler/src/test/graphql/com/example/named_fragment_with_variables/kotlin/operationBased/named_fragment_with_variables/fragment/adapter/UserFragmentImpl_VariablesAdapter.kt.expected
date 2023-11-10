@@ -5,14 +5,12 @@
 //
 package com.example.named_fragment_with_variables.fragment.adapter
 
-import com.apollographql.apollo3.api.CompositeAdapterContext
 import com.apollographql.apollo3.api.CustomScalarAdapters
 import com.apollographql.apollo3.api.IntAdapter
 import com.apollographql.apollo3.api.json.JsonWriter
 import com.example.named_fragment_with_variables.fragment.UserFragmentImpl
 import kotlin.Boolean
 import kotlin.Suppress
-import kotlin.Unit
 
 public object UserFragmentImpl_VariablesAdapter {
   @Suppress(
@@ -24,10 +22,8 @@ public object UserFragmentImpl_VariablesAdapter {
     `value`: UserFragmentImpl,
     customScalarAdapters: CustomScalarAdapters,
     withBooleanDefaultValues: Boolean,
-  ): Unit {
-    val adapterContext =
-        CompositeAdapterContext.Builder().customScalarAdapters(customScalarAdapters).build()
+  ) {
     writer.name("size")
-    IntAdapter.toJson(writer, CustomScalarAdapters.Empty, value.size)
+    IntAdapter.toJson(writer, customScalarAdapters, value.size)
   }
 }

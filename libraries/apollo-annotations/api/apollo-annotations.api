@@ -2,6 +2,9 @@ public abstract interface annotation class com/apollographql/apollo3/annotations
 	public abstract fun adapter ()Ljava/lang/Class;
 }
 
+public abstract interface annotation class com/apollographql/apollo3/annotations/ApolloAdapter : java/lang/annotation/Annotation {
+}
+
 public abstract interface annotation class com/apollographql/apollo3/annotations/ApolloDeprecatedSince : java/lang/annotation/Annotation {
 	public abstract fun version ()Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
 }
@@ -22,6 +25,7 @@ public final class com/apollographql/apollo3/annotations/ApolloDeprecatedSince$V
 	public static final field v3_7_2 Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
 	public static final field v3_7_5 Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
 	public static final field v4_0_0 Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
 	public static fun values ()[Lcom/apollographql/apollo3/annotations/ApolloDeprecatedSince$Version;
 }
@@ -32,6 +36,13 @@ public abstract interface annotation class com/apollographql/apollo3/annotations
 public abstract interface annotation class com/apollographql/apollo3/annotations/ApolloInternal : java/lang/annotation/Annotation {
 }
 
+public abstract interface annotation class com/apollographql/apollo3/annotations/ApolloObject : java/lang/annotation/Annotation {
+}
+
 public abstract interface annotation class com/apollographql/apollo3/annotations/ApolloRequiresOptIn : java/lang/annotation/Annotation {
+}
+
+public abstract interface annotation class com/apollographql/apollo3/annotations/GraphQLName : java/lang/annotation/Annotation {
+	public abstract fun name ()Ljava/lang/String;
 }
 

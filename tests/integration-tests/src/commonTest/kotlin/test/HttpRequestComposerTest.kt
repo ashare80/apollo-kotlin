@@ -6,7 +6,8 @@ import com.apollographql.apollo3.api.ApolloRequest
 import com.apollographql.apollo3.api.http.DefaultHttpRequestComposer
 import com.apollographql.apollo3.integration.httpcache.AllPlanetsQuery
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.testing.internal.runTest
 import okio.Buffer
 import kotlin.test.Test
@@ -20,7 +21,7 @@ class HttpRequestComposerTest {
   }
 
   private suspend fun tearDown() {
-    mockServer.stop()
+    mockServer.close()
   }
 
   @Test
@@ -40,11 +41,11 @@ class HttpRequestComposerTest {
 
     kotlin.runCatching {
       // No need to enqueue a successful response, we just want to make sure our headers reached the server
-      mockServer.enqueue("error")
+      mockServer.enqueueString("error")
       apolloClient.query(AllPlanetsQuery()).addHttpHeader("test", "is passing").execute()
     }
 
-    val response = mockServer.takeRequest()
+    val response = mockServer.awaitRequest()
     assertEquals("is passing", response.headers["test"])
   }
 }

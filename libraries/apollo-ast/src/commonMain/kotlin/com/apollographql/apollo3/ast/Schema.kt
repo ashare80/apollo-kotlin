@@ -2,7 +2,6 @@ package com.apollographql.apollo3.ast
 
 import com.apollographql.apollo3.annotations.ApolloExperimental
 import com.apollographql.apollo3.annotations.ApolloInternal
-import okio.Buffer
 
 /**
  * A wrapper around a schema [GQLDocument] that ensures the [GQLDocument] is valid and caches
@@ -39,17 +38,17 @@ class Schema internal constructor(
       .filterIsInstance<GQLDirectiveDefinition>()
       .associateBy { it.name }
 
-  val queryTypeDefinition: GQLTypeDefinition = rootOperationTypeDefinition("query")
+  val queryTypeDefinition: GQLTypeDefinition = rootOperationTypeDefinition("query", definitions)
       ?: throw SchemaValidationException("No query root type found")
 
-  val mutationTypeDefinition: GQLTypeDefinition? = rootOperationTypeDefinition("mutation")
+  val mutationTypeDefinition: GQLTypeDefinition? = rootOperationTypeDefinition("mutation", definitions)
 
-  val subscriptionTypeDefinition: GQLTypeDefinition? = rootOperationTypeDefinition("subscription")
+  val subscriptionTypeDefinition: GQLTypeDefinition? = rootOperationTypeDefinition("subscription", definitions)
 
   fun toGQLDocument(): GQLDocument = GQLDocument(
       definitions = definitions,
-      filePath = null
-  ).withoutBuiltinDefinitions()
+      sourceLocation = null
+  )
 
   /**
    * @param name the current name of the directive (like "kotlin_labs__nonnull")
@@ -64,19 +63,12 @@ class Schema internal constructor(
     return foreignNames[name] ?: name
   }
 
-  private fun rootOperationTypeDefinition(operationType: String): GQLTypeDefinition? {
-    return definitions.filterIsInstance<GQLSchemaDefinition>().single()
-        .rootOperationTypeDefinitions
-        .singleOrNull {
-          it.operationType == operationType
-        }
-        ?.namedType
-        ?.let { namedType ->
-          definitions.filterIsInstance<GQLObjectTypeDefinition>().single { it.name == namedType }
-        }
+  fun rootTypeNameOrNullFor(operationType: String): String? {
+    return rootOperationTypeDefinition(operationType, definitions)?.name
   }
+
   fun rootTypeNameFor(operationType: String): String {
-    return rootOperationTypeDefinition(operationType)?.name ?: operationType.replaceFirstChar { it.uppercaseChar() }
+    return rootTypeNameOrNullFor(operationType) ?: operationType.replaceFirstChar { it.uppercaseChar() }
   }
 
   fun typeDefinition(name: String): GQLTypeDefinition {
@@ -131,7 +123,7 @@ class Schema internal constructor(
   @ApolloInternal
   fun toMap(): Map<String, Any> {
     return mapOf(
-        "sdl" to GQLDocument(definitions, sourceLocation = null).toUtf8(),
+        "sdl" to GQLDocument(definitions, sourceLocation = null).toSDL(),
         "keyFields" to keyFields.mapValues { it.value.toList().sorted() },
         "foreignNames" to foreignNames,
         "directivesToStrip" to directivesToStrip,
@@ -217,12 +209,24 @@ class Schema internal constructor(
     @ApolloInternal
     fun fromMap(map: Map<String, Any>): Schema {
       return Schema(
-          definitions = Buffer().writeUtf8(map["sdl"] as String).parseAsGQLDocument().getOrThrow().definitions,
+          definitions = combineDefinitions((map["sdl"] as String).parseAsGQLDocument().getOrThrow().definitions, builtinDefinitions(), ConflictResolution.TakeLeft),
           keyFields = (map["keyFields"]!! as Map<String, Collection<String>>).mapValues { it.value.toSet() },
           foreignNames = map["foreignNames"]!! as Map<String, String>,
           directivesToStrip = map["directivesToStrip"]!! as List<String>,
           connectionTypes = (map["connectionTypes"]!! as List<String>).toSet(),
       )
+    }
+
+    internal fun rootOperationTypeDefinition(operationType: String, definitions: List<GQLDefinition>): GQLTypeDefinition? {
+      return definitions.filterIsInstance<GQLSchemaDefinition>().single()
+          .rootOperationTypeDefinitions
+          .singleOrNull {
+            it.operationType == operationType
+          }
+          ?.namedType
+          ?.let { namedType ->
+            definitions.filterIsInstance<GQLObjectTypeDefinition>().single { it.name == namedType }
+          }
     }
   }
 

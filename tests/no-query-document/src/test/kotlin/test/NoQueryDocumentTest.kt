@@ -13,7 +13,8 @@ import com.apollographql.apollo3.api.json.jsonReader
 import com.apollographql.apollo3.api.json.readAny
 import com.apollographql.apollo3.api.json.writeObject
 import com.apollographql.apollo3.mockserver.MockServer
-import com.apollographql.apollo3.mockserver.enqueue
+import com.apollographql.apollo3.mockserver.awaitRequest
+import com.apollographql.apollo3.mockserver.enqueueString
 import com.apollographql.apollo3.network.http.HttpNetworkTransport
 import com.apollographql.apollo3.testing.internal.runTest
 import okio.Buffer
@@ -63,19 +64,19 @@ class NoQueryDocumentTest {
         )
         .build()
 
-    mockServer.enqueue(statusCode = 500)
+    mockServer.enqueueString(statusCode = 500)
     kotlin.runCatching {
       apolloClient.query(GetRandomQuery())
           .execute()
     }
 
-    val request = mockServer.takeRequest()
+    val request = mockServer.awaitRequest()
 
     @Suppress("UNCHECKED_CAST")
     val asMap = Buffer().write(request.body).jsonReader().readAny() as Map<String, Any>
     assertEquals(asMap["query"], queryDocument)
 
     apolloClient.close()
-    mockServer.stop()
+    mockServer.close()
   }
 }

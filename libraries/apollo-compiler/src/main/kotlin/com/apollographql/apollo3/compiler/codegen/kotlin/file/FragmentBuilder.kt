@@ -5,7 +5,7 @@ import com.apollographql.apollo3.compiler.codegen.kotlin.CgFile
 import com.apollographql.apollo3.compiler.codegen.kotlin.CgFileBuilder
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinContext
 import com.apollographql.apollo3.compiler.codegen.kotlin.KotlinSymbols
-import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeDataClass
+import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.makeClassFromParameters
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddDescription
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.maybeAddJsExport
 import com.apollographql.apollo3.compiler.codegen.kotlin.helpers.toNamedType
@@ -26,6 +26,7 @@ internal class FragmentBuilder(
     flatten: Boolean,
     private val addJvmOverloads: Boolean,
     private val generateDataBuilders: Boolean,
+    private val generateInputBuilders: Boolean,
 ) : CgFileBuilder {
   private val layout = context.layout
   private val packageName = layout.fragmentPackageName(fragment.filePath)
@@ -67,16 +68,28 @@ internal class FragmentBuilder(
   }
 
   private fun IrFragmentDefinition.typeSpec(): TypeSpec {
+    val namedTypes = variables.map { it.toNamedType() }
+
     return TypeSpec.classBuilder(simpleName)
         .addSuperinterface(superInterfaceType())
         .maybeAddDescription(description)
-        .makeDataClass(variables.map { it.toNamedType().toParameterSpec(context) }, addJvmOverloads)
+        .makeClassFromParameters(
+            context.generateMethods,
+            namedTypes.map { it.toParameterSpec(context, true) },
+            addJvmOverloads,
+            context.resolver.resolveFragment(fragment.name)
+        )
         .addFunction(serializeVariablesFunSpec())
         .addFunction(adapterFunSpec(context, dataProperty))
         .addFunction(rootFieldFunSpec())
         // Fragments can have multiple data shapes
         .addTypes(dataTypeSpecs())
         .maybeAddJsExport(context)
+        .apply {
+          if (namedTypes.isNotEmpty() && generateInputBuilders) {
+            addType(namedTypes.builderTypeSpec(context, ClassName(packageName, simpleName)))
+          }
+        }
         .applyIf(generateDataBuilders) {
           addType(
               TypeSpec.companionObjectBuilder()

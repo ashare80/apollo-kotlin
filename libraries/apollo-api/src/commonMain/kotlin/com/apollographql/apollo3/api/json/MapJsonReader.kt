@@ -1,6 +1,6 @@
 package com.apollographql.apollo3.api.json
 
-import com.apollographql.apollo3.api.json.BufferedSourceJsonReader.Companion.MAX_STACK_SIZE
+import com.apollographql.apollo3.api.json.BufferedSourceJsonReader.Companion.INITIAL_STACK_SIZE
 import com.apollographql.apollo3.api.json.MapJsonReader.Companion.buffer
 import com.apollographql.apollo3.api.json.internal.toDoubleExact
 import com.apollographql.apollo3.api.json.internal.toIntExact
@@ -9,9 +9,9 @@ import com.apollographql.apollo3.exception.JsonDataException
 import kotlin.jvm.JvmOverloads
 
 /**
- * A [JsonReader] that reads data from a regular [Map<String, Any?>]
+ * A [JsonReader] that can consumes Kotlin values as Json
  *
- * Map values should be any of:
+ * values should be any of:
  * - String
  * - Int
  * - Double
@@ -25,13 +25,13 @@ import kotlin.jvm.JvmOverloads
  *
  * To read from a [okio.BufferedSource], see also [BufferedSourceJsonReader]
  *
- * @param root the root [Map] to read from
+ * @param root the root object to read from
  * @param pathRoot the path root to be prefixed to the returned path when calling [getPath]. Useful for [buffer].
  */
 class MapJsonReader
 @JvmOverloads
 constructor(
-    val root: Map<String, Any?>,
+    val root: Any?,
     private val pathRoot: List<Any> = emptyList(),
 ) : JsonReader {
 
@@ -50,19 +50,19 @@ constructor(
    * - a String representing the current key to be read in a Map
    * - null if peekedToken is BEGIN_OBJECT
    */
-  private val path = arrayOfNulls<Any>(MAX_STACK_SIZE)
+  private var path = arrayOfNulls<Any>(INITIAL_STACK_SIZE)
 
   /**
    * The current object memorized in case we need to rewind
    */
-  private var containerStack = arrayOfNulls<Map<String, Any?>>(MAX_STACK_SIZE)
-  private val iteratorStack = arrayOfNulls<Iterator<*>>(MAX_STACK_SIZE)
-  private val nameIndexStack = IntArray(MAX_STACK_SIZE)
+  private var containerStack = arrayOfNulls<Map<String, Any?>>(INITIAL_STACK_SIZE)
+  private var iteratorStack = arrayOfNulls<Iterator<*>>(INITIAL_STACK_SIZE)
+  private var nameIndexStack = IntArray(INITIAL_STACK_SIZE)
 
   private var stackSize = 0
 
   init {
-    peekedToken = JsonReader.Token.BEGIN_OBJECT
+    peekedToken = anyToToken(root)
     peekedData = root
   }
 
@@ -113,6 +113,16 @@ constructor(
     }
   }
 
+  private fun increaseStack() {
+    if (stackSize == path.size) {
+      path = path.copyOf(path.size * 2)
+      containerStack = containerStack.copyOf(containerStack.size * 2)
+      nameIndexStack = nameIndexStack.copyOf(nameIndexStack.size * 2)
+      iteratorStack = iteratorStack.copyOf(iteratorStack.size * 2)
+    }
+    stackSize++
+  }
+
   override fun beginArray() = apply {
     if (peek() != JsonReader.Token.BEGIN_ARRAY) {
       throw JsonDataException("Expected BEGIN_ARRAY but was ${peek()} at path ${getPathAsString()}")
@@ -120,10 +130,7 @@ constructor(
 
     val currentValue = peekedData as List<Any?>
 
-    check(stackSize < MAX_STACK_SIZE) {
-      "Nesting too deep"
-    }
-    stackSize++
+    increaseStack()
 
     path[stackSize - 1] = -1
     iteratorStack[stackSize - 1] = currentValue.iterator()
@@ -145,10 +152,8 @@ constructor(
       throw JsonDataException("Expected BEGIN_OBJECT but was ${peek()} at path ${getPathAsString()}")
     }
 
-    check(stackSize < MAX_STACK_SIZE) {
-      "Nesting too deep"
-    }
-    stackSize++
+    increaseStack()
+
     @Suppress("UNCHECKED_CAST")
     containerStack[stackSize - 1] = peekedData as Map<String, Any?>
 

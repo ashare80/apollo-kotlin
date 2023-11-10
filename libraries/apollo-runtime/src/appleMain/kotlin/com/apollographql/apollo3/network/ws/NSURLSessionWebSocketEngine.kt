@@ -2,17 +2,20 @@ package com.apollographql.apollo3.network.ws
 
 import com.apollographql.apollo3.api.http.HttpHeader
 import com.apollographql.apollo3.exception.ApolloNetworkException
-import com.apollographql.apollo3.internal.ChannelWrapper
+import com.apollographql.apollo3.exception.ApolloWebSocketClosedException
 import com.apollographql.apollo3.network.toNSData
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.convert
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import okio.ByteString
-import okio.toByteString
+import okio.ByteString.Companion.toByteString
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSOperationQueue
+import platform.Foundation.NSString
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
 import platform.Foundation.NSURLSession
@@ -23,6 +26,8 @@ import platform.Foundation.NSURLSessionWebSocketMessage
 import platform.Foundation.NSURLSessionWebSocketMessageTypeData
 import platform.Foundation.NSURLSessionWebSocketMessageTypeString
 import platform.Foundation.NSURLSessionWebSocketTask
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.create
 import platform.Foundation.setHTTPMethod
 import platform.Foundation.setValue
 import platform.darwin.NSObject
@@ -44,12 +49,12 @@ actual class DefaultWebSocketEngine(
         NSURLSession.sessionWithConfiguration(
             configuration = NSURLSessionConfiguration.defaultSessionConfiguration,
             delegate = NSURLSessionWebSocketDelegate(connectionListener),
-            delegateQueue = NSOperationQueue.mainQueue
+            delegateQueue = NSOperationQueue.currentQueue()
         ).webSocketTaskWithRequest(request)
       }
   )
 
-  override suspend fun open(
+  actual override suspend fun open(
       url: String,
       headers: List<HttpHeader>,
   ): WebSocketConnection {
@@ -61,7 +66,7 @@ actual class DefaultWebSocketEngine(
       setHTTPMethod("GET")
     }
 
-    val messageChannel = ChannelWrapper(Channel<String>(Channel.UNLIMITED))
+    val messageChannel = Channel<String>(Channel.UNLIMITED)
     val isOpen = CompletableDeferred<Boolean>()
 
     val connectionListener = object : WebSocketConnectionListener {
@@ -95,10 +100,10 @@ actual class DefaultWebSocketEngine(
 
 private class WebSocketConnectionImpl(
     val webSocket: NSURLSessionWebSocketTask,
-    val messageChannel: ChannelWrapper<String>,
+    val messageChannel: Channel<String>,
 ) : WebSocketConnection {
   init {
-    messageChannel.setInvokeOnClose {
+    messageChannel.invokeOnClose {
       webSocket.cancelWithCloseCode(
           closeCode = CLOSE_NORMAL.convert(),
           reason = null
@@ -112,7 +117,8 @@ private class WebSocketConnectionImpl(
   }
 
   override fun send(data: ByteString) {
-    if (!messageChannel.isClosed) {
+    @OptIn(DelicateCoroutinesApi::class)
+    if (!messageChannel.isClosedForSend) {
       val message = NSURLSessionWebSocketMessage(data.toByteArray().toNSData())
       val completionHandler = { error: NSError? ->
         if (error != null) handleError(error)
@@ -122,7 +128,8 @@ private class WebSocketConnectionImpl(
   }
 
   override fun send(string: String) {
-    if (!messageChannel.isClosed) {
+    @OptIn(DelicateCoroutinesApi::class)
+    if (!messageChannel.isClosedForSend) {
       val message = NSURLSessionWebSocketMessage(string)
       val completionHandler = { error: NSError? ->
         if (error != null) handleError(error)
@@ -148,10 +155,15 @@ private class WebSocketConnectionImpl(
 
   private fun handleError(error: NSError) {
     messageChannel.close(
-        ApolloNetworkException(
-            message = "Web socket communication error",
-            platformCause = error
-        )
+        if (webSocket.closeCode.convert<Int>() != 0) ApolloWebSocketClosedException(
+            code = webSocket.closeCode.convert(),
+            reason = webSocket.closeReason?.toKotlinString(),
+        ) else {
+          ApolloNetworkException(
+              message = "Web socket communication error",
+              platformCause = error
+          )
+        }
     )
     webSocket.cancel()
   }
@@ -199,3 +211,6 @@ private class NSURLSessionWebSocketDelegate(
     webSocketConnectionListener.onClose(webSocket = webSocketTask, code = didCloseWithCode)
   }
 }
+
+@OptIn(BetaInteropApi::class)
+private fun NSData.toKotlinString() = NSString.create(this, NSUTF8StringEncoding) as String?

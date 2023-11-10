@@ -3,9 +3,9 @@ pluginManagement {
 }
 
 plugins {
-  id("com.gradle.enterprise") version "3.13.4" // sync with libraries.toml
-  id("com.gradle.common-custom-user-data-gradle-plugin") version "1.11"
-  id("org.gradle.toolchains.foojay-resolver-convention") version "0.6.0"
+  id("com.gradle.enterprise") version "3.15.1" // sync with libraries.toml
+  id("com.gradle.common-custom-user-data-gradle-plugin") version "1.12"
+  id("org.gradle.toolchains.foojay-resolver-convention") version "0.7.0"
 }
 
 rootProject.name = "apollo-tests"
@@ -19,8 +19,11 @@ rootProject.projectDir
     }
     .filter { it.isDirectory && File(it, "build.gradle.kts").exists() }
     .forEach {
-      val project = it.relativeTo(rootProject.projectDir).path.replace(File.separatorChar, ':')
+      // Do no create intermediate projects as they will fail for apolloTestAgreggation
+      // See https://stackoverflow.com/questions/21015353/gradle-intermediate-dir-of-multiproject-not-subproject
+      val project = it.relativeTo(rootProject.projectDir).path.replace(File.separatorChar, '-')
       include(project)
+      project(":$project").projectDir = it
     }
 
 includeBuild("../")

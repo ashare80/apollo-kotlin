@@ -1,10 +1,12 @@
 plugins {
   id("org.jetbrains.kotlin.jvm")
-  id("apollo.library")
-
   // Depend on a published version of the plugin to avoid a "chicken and egg" problem
-  id("com.apollographql.apollo3") version "4.0.0-alpha.1"
+  alias(libs.plugins.apollo.published)
 }
+
+apolloLibrary(
+    javaModuleName = "com.apollographql.apollo3.tooling"
+)
 
 dependencies {
   api(project(":apollo-compiler"))
@@ -69,6 +71,7 @@ apollo {
       endpointUrl.set("https://graphql.api.apollographql.com/api/graphql")
       schemaFile.set(file("src/main/graphql/platform-api/internal/schema.graphqls"))
     }
+    mapScalar("Timestamp", "java.time.Instant", "com.apollographql.apollo3.tooling.TimestampAdapter")
   }
 
 }

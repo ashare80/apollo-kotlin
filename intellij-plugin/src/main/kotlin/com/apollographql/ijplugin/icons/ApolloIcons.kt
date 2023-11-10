@@ -20,6 +20,15 @@ object ApolloIcons {
     val ApolloColor = load("/icons/action-apollo-color.svg")
   }
 
+  object ToolWindow {
+    @JvmField
+    val NormalizedCacheViewer = load("/icons/toolwindow-normalized-cache-viewer.svg")
+  }
+
+  object Node {
+    val Package by lazy { load("/icons/node-package.svg") }
+  }
+
   private fun load(path: String): Icon {
     return IconLoader.getIcon(path, ApolloIcons::class.java)
   }

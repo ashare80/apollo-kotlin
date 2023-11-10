@@ -1,5 +1,5 @@
 import com.apollographql.apollo3.api.json.DynamicJsJsonReader
-import com.apollographql.apollo3.api.parseJsonResponse
+import com.apollographql.apollo3.api.toApolloResponse
 import js.test.CreateCustomerMutation
 import js.test.GetSalesPeopleQuery
 import kotlin.test.Test
@@ -13,7 +13,7 @@ class JsTest {
 
   @Test
   fun dynamicJsonReaderCanParseIntoAdapter() {
-    val dynamicResponse = JSON.parse("""
+    val dynamicResponse: dynamic = JSON.parse("""
           {
             "data": {
               "getSalesPeople": [
@@ -25,10 +25,10 @@ class JsTest {
               ]
             }
           }
-        """.trimIndent()) as dynamic
+        """.trimIndent())
     val query = GetSalesPeopleQuery()
     val jsonReader = DynamicJsJsonReader(dynamicResponse)
-    val response = query.parseJsonResponse(jsonReader)
+    val response = jsonReader.toApolloResponse(operation = query)
     assertEquals(
         GetSalesPeopleQuery.Data(
             getSalesPeople = listOf(

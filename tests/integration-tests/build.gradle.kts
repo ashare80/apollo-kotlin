@@ -1,28 +1,16 @@
 plugins {
   id("org.jetbrains.kotlin.multiplatform")
-  id("apollo.test")
   id("com.apollographql.apollo3")
 }
 
-apolloTest {
-  mpp {}
-}
+apolloTest()
 
 kotlin {
-  /**
-   * Extra target to test the java codegen
-   */
-  jvm("javaCodegen") {
-    withJava()
-  }
-
   sourceSets {
     findByName("commonMain")?.apply {
       dependencies {
         implementation(libs.apollo.api)
         implementation(libs.apollo.normalizedcache)
-        implementation(libs.apollo.testingsupport)
-        implementation(libs.apollo.mockserver)
         implementation(libs.apollo.adapters)
         implementation(libs.apollo.runtime)
       }
@@ -30,17 +18,13 @@ kotlin {
 
     findByName("commonTest")?.apply {
       dependencies {
+        implementation(libs.apollo.adapters)
+        implementation(libs.apollo.mockserver)
+        implementation(libs.apollo.testingsupport)
         implementation(libs.kotlinx.coroutines)
         implementation(libs.kotlinx.serialization.json.asProvider())
         implementation(libs.kotlinx.coroutines.test)
         implementation(libs.turbine)
-      }
-    }
-
-    findByName("javaCodegenTest")?.apply {
-      dependencies {
-        // Add test-junit manually because configureMppTestsDefaults did not do it for us
-        implementation(libs.kotlin.test.junit)
       }
     }
 
@@ -93,6 +77,7 @@ fun configureApollo(generateKotlinModels: Boolean) {
             this.generateKotlinModels.set(generateKotlinModels)
             generateOptionalOperationVariables.set(false)
             configureConnection(generateKotlinModels)
+            languageVersion.set("1.5")
           }
         }
     file("src/commonTest/kotlin/test").listFiles()!!
@@ -115,6 +100,7 @@ fun configureApollo(generateKotlinModels: Boolean) {
             packageName.set(it.name)
             generateOptionalOperationVariables.set(false)
             configureConnection(generateKotlinModels)
+            languageVersion.set("1.5")
           }
         }
   }
@@ -122,60 +108,18 @@ fun configureApollo(generateKotlinModels: Boolean) {
 
 fun com.apollographql.apollo3.gradle.api.Service.configureConnection(generateKotlinModels: Boolean) {
   outputDirConnection {
-    if (System.getProperty("idea.sync.active") == null) {
-      if (generateKotlinModels) {
-        connectToKotlinSourceSet("jvmTest")
-        connectToKotlinSourceSet("jsTest")
-        connectToKotlinSourceSet("appleTest")
-      } else {
-        connectToJavaSourceSet("main")
-      }
-    } else {
-      // For autocomplete to work
+    if (generateKotlinModels) {
       connectToKotlinSourceSet("commonTest")
+    } else {
+      connectToJavaSourceSet("javaCodegenTest")
     }
   }
 }
 configureApollo(true)
-configureApollo(false)
 
-// See https://youtrack.jetbrains.com/issue/KT-56019
-val myAttribute = Attribute.of("com.apollographql.test", String::class.java)
-
-configurations.named("jvmApiElements").configure {
-  attributes {
-    attribute(myAttribute, "jvm")
-  }
-}
-
-configurations.named("javaCodegenApiElements").configure {
-  attributes {
-    attribute(myAttribute, "java")
-  }
-}
-
-configurations.named("jvmRuntimeElements").configure {
-  attributes {
-    attribute(myAttribute, "jvm-runtime")
-  }
-}
-
-configurations.named("javaCodegenRuntimeElements").configure {
-  attributes {
-    attribute(myAttribute, "java-runtime")
-  }
-}
-
-configurations.named("jvmSourcesElements").configure {
-  attributes {
-    attribute(myAttribute, "jvm")
-  }
-}
-
-configurations.named("javaCodegenSourcesElements").configure {
-  attributes {
-    attribute(myAttribute, "java")
-  }
+if (System.getProperty("idea.sync.active") == null) {
+  registerJavaCodegenTestTask()
+  configureApollo(false)
 }
 
 val checkPersistedQueryManifest = tasks.register("checkPersistedQueryManifest") {

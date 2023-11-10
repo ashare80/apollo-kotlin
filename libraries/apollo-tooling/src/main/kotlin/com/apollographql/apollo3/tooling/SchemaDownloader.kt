@@ -7,29 +7,17 @@ import com.apollographql.apollo3.ast.introspection.IntrospectionSchema
 import com.apollographql.apollo3.ast.introspection.toGQLDocument
 import com.apollographql.apollo3.ast.introspection.toIntrospectionSchema
 import com.apollographql.apollo3.ast.introspection.writeTo
-import com.apollographql.apollo3.ast.toSchema
-import com.apollographql.apollo3.ast.toUtf8
+import com.apollographql.apollo3.ast.toFullSchemaGQLDocument
+import com.apollographql.apollo3.ast.toGQLDocument
+import com.apollographql.apollo3.ast.toSDL
 import com.apollographql.apollo3.exception.ApolloGraphQLException
 import com.apollographql.apollo3.network.okHttpClient
 import com.apollographql.apollo3.tooling.platformapi.public.DownloadSchemaQuery
 import kotlinx.coroutines.runBlocking
-import okio.Buffer
 import java.io.File
 import com.apollographql.apollo3.tooling.graphql.draft.IntrospectionQuery as GraphQLDraftIntrospectionQuery
 import com.apollographql.apollo3.tooling.graphql.june2018.IntrospectionQuery as GraphQLJune2018IntrospectionQuery
 import com.apollographql.apollo3.tooling.graphql.october2021.IntrospectionQuery as GraphQLOctober2021IntrospectionQuery
-
-/**
- * @return the graph from a service key like "service:$graph:$token"
- *
- * This will not work with user keys
- */
-internal fun String.getGraph(): String? {
-  if (!startsWith("service:")) {
-    return null
-  }
-  return split(":")[1]
-}
 
 
 @ApolloExperimental
@@ -66,7 +54,7 @@ object SchemaDownloader {
       insecure: Boolean = false,
       headers: Map<String, String> = emptyMap(),
   ) {
-    var introspectionSchemaJson: String? = null
+    var introspectionDataJson: String? = null
     var introspectionSchema: IntrospectionSchema? = null
     var sdlSchema: String? = null
 
@@ -76,21 +64,20 @@ object SchemaDownloader {
         // Try the latest spec first
         for (specVersion in SpecVersion.values().reversed()) {
           try {
-            introspectionSchemaJson = downloadIntrospection(
+            introspectionDataJson = downloadIntrospection(
                 endpoint = endpoint,
                 headers = headers,
                 insecure = insecure,
                 specVersion = specVersion,
             )
-            // Validates the JSON schema
-            introspectionSchema = introspectionSchemaJson.toIntrospectionSchema()
+            introspectionSchema = introspectionDataJson.toIntrospectionSchema()
             exception = null
             break
           } catch (e: Exception) {
             exception = e
           }
         }
-        if (introspectionSchemaJson == null) {
+        if (introspectionDataJson == null) {
           throw exception!!
         }
       }
@@ -121,20 +108,21 @@ object SchemaDownloader {
       if (introspectionSchema == null) {
         check(sdlSchema != null)
         // Convert from SDL to JSON
-        Buffer().writeUtf8(sdlSchema)
-            .toSchema()
+        sdlSchema
+            .toGQLDocument()
+            .toFullSchemaGQLDocument()
             .toIntrospectionSchema()
             .writeTo(schema)
       } else {
-        check(introspectionSchemaJson != null)
+        check(introspectionDataJson != null)
         // Copy Json verbatim
-        schema.writeText(introspectionSchemaJson)
+        schema.writeText(introspectionDataJson)
       }
     } else {
       if (sdlSchema == null) {
         check(introspectionSchema != null)
         // Convert from JSON to SDL
-        schema.writeText(introspectionSchema.toGQLDocument().toUtf8(indent = "  "))
+        schema.writeText(introspectionSchema.toGQLDocument().toSDL(indent = "  "))
       } else {
         // Copy SDL verbatim
         schema.writeText(sdlSchema)

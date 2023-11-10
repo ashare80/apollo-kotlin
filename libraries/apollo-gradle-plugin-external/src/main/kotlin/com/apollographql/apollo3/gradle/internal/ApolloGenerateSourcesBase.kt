@@ -5,6 +5,7 @@ import com.apollographql.apollo3.compiler.ApolloCompiler
 import com.apollographql.apollo3.compiler.CodegenMetadata
 import com.apollographql.apollo3.compiler.CodegenSchema
 import com.apollographql.apollo3.compiler.CommonCodegenOptions
+import com.apollographql.apollo3.compiler.GeneratedMethod
 import com.apollographql.apollo3.compiler.JavaCodegenOptions
 import com.apollographql.apollo3.compiler.JavaNullable
 import com.apollographql.apollo3.compiler.KotlinCodegenOptions
@@ -16,6 +17,7 @@ import com.apollographql.apollo3.compiler.defaultAddJvmOverloads
 import com.apollographql.apollo3.compiler.defaultClassesForEnumsMatching
 import com.apollographql.apollo3.compiler.defaultGenerateFilterNotNull
 import com.apollographql.apollo3.compiler.defaultGenerateFragmentImplementations
+import com.apollographql.apollo3.compiler.defaultGenerateInputBuilders
 import com.apollographql.apollo3.compiler.defaultGenerateModelBuilders
 import com.apollographql.apollo3.compiler.defaultGeneratePrimitiveTypes
 import com.apollographql.apollo3.compiler.defaultGenerateQueryDocument
@@ -46,6 +48,7 @@ import org.gradle.api.tasks.OutputFile
 @Suppress("UnstableApiUsage")
 abstract class ApolloGenerateSourcesBase : DefaultTask() {
   @get:OutputFile
+  @get:Optional
   abstract val operationManifestFile: RegularFileProperty
 
   @get:Input
@@ -94,6 +97,14 @@ abstract class ApolloGenerateSourcesBase : DefaultTask() {
   @get:Input
   @get:Optional
   abstract val generateFilterNotNull: Property<Boolean>
+
+  @get:Input
+  @get:Optional
+  abstract val generateMethods: ListProperty<GeneratedMethod>
+
+  @get:Input
+  @get:Optional
+  abstract val generateInputBuilders: Property<Boolean>
 
   @get:Input
   @get:Optional
@@ -152,7 +163,7 @@ abstract class ApolloGenerateSourcesBase : DefaultTask() {
 
     val operationOutput = ApolloCompiler.buildOperationOutput(
         ir = irOperations,
-        operationManifestFile = operationManifestFile.asFile.get(),
+        operationManifestFile = operationManifestFile.asFile.orNull,
         operationManifestFormat = operationManifestFormat.get(),
         operationOutputGenerator = operationOutputGenerator,
     )
@@ -174,6 +185,7 @@ abstract class ApolloGenerateSourcesBase : DefaultTask() {
         useSemanticNaming = useSemanticNaming.getOrElse(defaultUseSemanticNaming),
         packageNameGenerator = packageNameGenerator,
         generateFragmentImplementations = generateFragmentImplementations.getOrElse(defaultGenerateFragmentImplementations),
+        generateMethods = generateMethods.getOrElse(GeneratedMethod.defaultsFor(codegenSchema.targetLanguage)),
         generateQueryDocument = generateQueryDocument.getOrElse(defaultGenerateQueryDocument),
         generateSchema = generateSchema.getOrElse(defaultGenerateSchema),
         generatedSchemaName = generatedSchemaName.getOrElse(defaultGeneratedSchemaName),
@@ -206,7 +218,8 @@ abstract class ApolloGenerateSourcesBase : DefaultTask() {
             requiresOptInAnnotation = requiresOptInAnnotation.getOrElse(defaultRequiresOptInAnnotation),
             compilerKotlinHooks = compilerKotlinHooks,
             languageVersion = codegenSchema.targetLanguage,
-            jsExport = jsExport.getOrElse(defaultJsExport)
+            jsExport = jsExport.getOrElse(defaultJsExport),
+            generateInputBuilders = generateInputBuilders.getOrElse(defaultGenerateInputBuilders)
         )
         ApolloCompiler.writeKotlin(
             commonCodegenOptions = commonCodegenOptions,
